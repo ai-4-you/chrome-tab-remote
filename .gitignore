@@ -5,3 +5,4 @@ dist/
 # Ignore Code Giant output directory
 .codegiant/
 cg-task-result-*.md
+.scan-results/

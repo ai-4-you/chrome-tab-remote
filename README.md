@@ -35,7 +35,7 @@ One design principle shapes everything the tools return: **the consumer is a lan
 
 ## Try it yourself — manual test walkthrough
 
-Prerequisites: Node 22+, Google Chrome, macOS (installer script; other OSes need a manual native-host manifest).
+Prerequisites: Node 22+, Google Chrome and/or Brave, macOS (installer script; other OSes need a manual native-host manifest).
 
 ### 1. Build and install
 
@@ -67,7 +67,7 @@ Grants, approvals, and audit stay fully separate per browser; an agent picks the
 ### 2. Grant a tab
 
 1. Open any normal website and click the **Chrome Tab Remote** toolbar icon — the side panel opens.
-2. Check the panel shows **Native host: connected**.
+2. Check the panel shows **Native host: connected**, with an `MCP: http://127.0.0.1:…/mcp` line under the header — that URL is where your agent connects (it differs per browser).
 3. Click **"Grant observe access (30 min)"** and accept Chrome's permission prompt for that site.
 4. You should see an **Active grant** card with the site, a countdown, and a Revoke button.
 
@@ -107,9 +107,9 @@ npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot filter:intera
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_click ref:<a-button-ref> --allow-http --timeout 130000
 ```
 
-(`--timeout 130000`: mcporter's 60 s default is shorter than the ~2 min approval window.) Keep the side panel visible — that's where the approval card appears.
+(`--timeout 130000`: mcporter's 60 s default is shorter than the ~2 min approval window.) The approval card appears in the side panel; if the panel is closed, a red **"!"** badge on the toolbar icon tells you something is waiting.
 
-The call pauses; the side panel shows **"Agent wants …"** with Approve/Deny buttons and an auto-deny countdown — plus a **red "!" badge on the toolbar icon** so you notice even with the panel closed (a system notification is also sent, best-effort: macOS blocks Chrome notifications unless you allow them in System Settings). Approve it and the action executes; deny it and the agent gets `approval_denied` (and is told not to retry). `tab_fill` shows you the exact text before you approve; `tab_select` the chosen option.
+The call pauses; the side panel shows **"Agent wants …"** with Approve/Deny buttons and an auto-deny countdown (a system notification is also sent, best-effort — macOS blocks Chrome notifications unless you allow them in System Settings). Approve it and the action executes; deny it and the agent gets `approval_denied` (and is told not to retry). `tab_fill` shows you the exact text before you approve; `tab_select` the chosen option.
 
 Multi-step work uses `tab_plan`: the agent proposes up to 10 steps, you see the **full numbered list** and approve it once as a whole (the plan is frozen — no deviation). Every action result comes back with a **fresh snapshot of the changed page** and an honest confidence label (`settled` / `still-changing` / `interrupted`). And when the agent has no grant at all, it can `request_grant` — a card (with its reason) asks *you* to pick and grant a tab; it never picks one itself.
 
@@ -137,16 +137,16 @@ If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 230 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
+Everything above is implemented and verified live against real browsers (Chrome + Brave, 2026-08-02): observing, acting behind the approval gate, frozen multi-step plans, Freaky mode, agent-initiated access requests, and per-browser isolation — 231 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
 
-- The local MCP endpoint has **no authentication** — other processes on *your own machine* could reach it while a grant is active (though actions still require your approval click). Deliberate decision for the fully-local deployment; localhost-only + DNS-rebinding protection are in place.
+- The local MCP endpoints have **no authentication** — other processes on *your own machine* could reach them while a grant is active (though actions still require your approval click). Deliberate decision for the fully-local deployment; localhost-only + DNS-rebinding protection are in place.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
-- `scroll` and `navigate` actions are deliberately deferred; approval is strictly per-action (no batch mode yet) — see the trust ladder in [plan.md](./plan.md).
+- `scroll` and `navigate` actions are deliberately deferred — see the trust ladder in [plan.md](./plan.md).
 
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 230 tests + dependency audit
+./precommit.sh   # typecheck + lint + 231 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

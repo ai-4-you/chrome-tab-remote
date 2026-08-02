@@ -1,0 +1,10 @@
+# Gitleaks configuration — extends the default rules.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """The Chrome extension manifest 'key' field is the RSA PUBLIC key
+(SPKI) that pins the extension ID across installs — it is public by design
+(every published extension exposes it) and is not a secret. The matching
+private key is not part of this repository."""
+paths = ['''packages/extension/manifest\.json''']
