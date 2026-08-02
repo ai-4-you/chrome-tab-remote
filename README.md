@@ -19,6 +19,12 @@ The goal is an extension so small, so boring, and so reviewable that a security-
 - **Everything is audited.** Every grant, every read, every revocation — visible live in the side panel and appended to a local log file (`~/.chrome-tab-remote/audit.jsonl`).
 - **No agent included, on purpose.** The tab is exposed through [MCP](https://modelcontextprotocol.io), the open standard for agent↔tool connections. Any MCP-capable agent (Claude Code, custom tooling, a plain CLI) can be the "brain" — this project only guards the door.
 
+## What it looks like
+
+The side panel is scoped to the tab you're looking at — here the user is on heise.de (not shared), the grant lives on another tab, and the agent's 2-step plan waits for approval with every detail spelled out:
+
+<img src="./docs/screenshots/side-panel-tab-scoped-approval.png" alt="Side panel: tab-scoped view with plan approval" width="420" />
+
 ## How it works
 
 ![Architecture](./docs/solution-architecture.svg)
@@ -90,7 +96,9 @@ npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_click ref:<a-button-re
 
 (`--timeout 130000`: mcporter's 60 s default is shorter than the ~2 min approval window.) Keep the side panel visible — that's where the approval card appears.
 
-The call pauses; the side panel shows **"Agent wants to click …"** with Approve/Deny buttons and an auto-deny countdown. Approve it and the click executes; deny it and the agent gets `approval_denied` (and is told not to retry). `tab_fill` shows you the exact text before you approve; `tab_select` the chosen option.
+The call pauses; the side panel shows **"Agent wants …"** with Approve/Deny buttons and an auto-deny countdown — plus a **red "!" badge on the toolbar icon** so you notice even with the panel closed (a system notification is also sent, best-effort: macOS blocks Chrome notifications unless you allow them in System Settings). Approve it and the action executes; deny it and the agent gets `approval_denied` (and is told not to retry). `tab_fill` shows you the exact text before you approve; `tab_select` the chosen option.
+
+Multi-step work uses `tab_plan`: the agent proposes up to 10 steps, you see the **full numbered list** and approve it once as a whole (the plan is frozen — no deviation). Every action result comes back with a **fresh snapshot of the changed page** and an honest confidence label (`settled` / `still-changing` / `interrupted`). And when the agent has no grant at all, it can `request_grant` — a card (with its reason) asks *you* to pick and grant a tab; it never picks one itself.
 
 **⚡ Freaky mode** (on the grant card, act grants only): flip it and actions run *without* the per-action pause — flip it back any time, even mid-session. It's off by default, dies with the grant (every new grant starts strict), and every auto-approved action is still audited.
 
@@ -116,7 +124,7 @@ If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 198 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
+Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 222 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
 
 - The local MCP endpoint has **no authentication** — other processes on *your own machine* could reach it while a grant is active (though actions still require your approval click). Deliberate decision for the fully-local deployment; localhost-only + DNS-rebinding protection are in place.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
@@ -125,7 +133,7 @@ Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fi
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 198 tests + dependency audit
+./precommit.sh   # typecheck + lint + 222 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

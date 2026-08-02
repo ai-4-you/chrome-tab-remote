@@ -5,11 +5,14 @@ import type { AuditEntry, Grant } from '@ctr/shared';
 
 interface PendingApproval {
   opId: string;
-  tool: 'tab_click' | 'tab_fill' | 'tab_select';
-  ref: string;
-  target: string;
-  detail?: string;
+  steps: { kind: 'click' | 'fill' | 'select'; target: string; detail?: string }[];
   origin: string;
+  deadline: number;
+}
+
+interface PendingGrantRequest {
+  reason?: string;
+  requestedMode: 'observe' | 'act';
   deadline: number;
 }
 
@@ -17,6 +20,7 @@ interface StateResponse {
   grants: Grant[];
   nativeStatus: 'connected' | 'disconnected';
   pendingApproval: PendingApproval | null;
+  pendingGrantRequest: PendingGrantRequest | null;
   /** id + title of the granted tab (null when no grant or its tab is gone). */
   grantedTab: { id: number; title: string } | null;
 }
@@ -57,6 +61,12 @@ const els = {
   approveBtn: $('approve-btn') as HTMLButtonElement,
   denyBtn: $('deny-btn') as HTMLButtonElement,
   approvalGotoBtn: $('approval-goto-btn') as HTMLButtonElement,
+  requestSection: $('request-section'),
+  requestMode: $('request-mode'),
+  requestReason: $('request-reason'),
+  requestHint: $('request-hint'),
+  requestCountdown: $('request-countdown'),
+  requestDismissBtn: $('request-dismiss-btn') as HTMLButtonElement,
   auditAll: $('audit-all') as HTMLInputElement,
   auditEmpty: $('audit-empty'),
   auditList: $('audit-list'),
@@ -66,6 +76,7 @@ let state: StateResponse = {
   grants: [],
   nativeStatus: 'disconnected',
   pendingApproval: null,
+  pendingGrantRequest: null,
   grantedTab: null,
 };
 let lastAudit: AuditEntry[] = [];
@@ -205,12 +216,6 @@ function goToGrantedTab(): void {
   })();
 }
 
-const ACTION_VERBS: Record<PendingApproval['tool'], string> = {
-  tab_click: 'click',
-  tab_fill: 'fill',
-  tab_select: 'select in',
-};
-
 function renderApproval(): void {
   const pending = state.pendingApproval;
   if (!pending) {
@@ -218,10 +223,38 @@ function renderApproval(): void {
     return;
   }
   els.approvalSection.classList.remove('hidden');
-  els.approvalText.textContent = `Agent wants to ${ACTION_VERBS[pending.tool]} ${pending.target} on ${pending.origin}`;
-  els.approvalDetail.textContent = pending.detail ?? '';
+  const n = pending.steps.length;
+  els.approvalText.textContent =
+    n === 1
+      ? `Agent wants one action on ${pending.origin}:`
+      : `Agent wants a plan of ${n} actions on ${pending.origin} (approved as a whole, executed in order):`;
+  els.approvalDetail.textContent = pending.steps
+    .map((s, i) => `${i + 1}. ${s.kind} ${s.target}${s.detail ? ` — ${s.detail}` : ''}`)
+    .join('\n');
   const secondsLeft = Math.max(0, Math.floor((pending.deadline - Date.now()) / 1000));
   els.approvalCountdown.textContent = `Auto-deny in ${secondsLeft}s`;
+}
+
+function renderGrantRequest(): void {
+  const request = state.pendingGrantRequest;
+  if (!request) {
+    els.requestSection.classList.add('hidden');
+    return;
+  }
+  els.requestSection.classList.remove('hidden');
+  const act = request.requestedMode === 'act';
+  // Structured + color-coded by requested capability: act requests are loud.
+  els.requestSection.classList.toggle('request-act', act);
+  els.requestMode.textContent = act
+    ? '⚡ OBSERVE + ACT requested — the agent wants to click/fill (each action still needs your approval)'
+    : '👁 OBSERVE requested — read-only access';
+  els.requestMode.className = `request-mode ${act ? 'request-mode-act' : 'request-mode-observe'}`;
+  els.requestReason.textContent = request.reason ? `Reason: ${request.reason}` : 'No reason given.';
+  els.requestHint.textContent = act
+    ? 'Open the tab you want to share, TICK "allow actions", then click Grant — or dismiss. Granting observe-only instead is also a valid answer.'
+    : 'Open the tab you want to share, then click Grant — or dismiss.';
+  const secondsLeft = Math.max(0, Math.floor((request.deadline - Date.now()) / 1000));
+  els.requestCountdown.textContent = `Expires in ${secondsLeft}s`;
 }
 
 /**
@@ -276,6 +309,7 @@ async function refresh(): Promise<void> {
   renderCurrentTab();
   renderGrant();
   renderApproval();
+  renderGrantRequest();
   renderAudit(lastAudit);
 }
 
@@ -396,10 +430,18 @@ chrome.runtime.onMessage.addListener((msg: unknown) => {
 // Active-tab changes affect the "Current tab" card.
 chrome.tabs.onActivated.addListener(() => void refresh());
 
+els.requestDismissBtn.addEventListener('click', () => {
+  void (async () => {
+    await chrome.runtime.sendMessage({ type: 'ctrDismissGrantRequest' });
+    await refresh();
+  })();
+});
+
 // 1s tick: countdowns + expiry flip without waiting for a push.
 setInterval(() => {
   renderGrant();
   renderApproval();
+  renderGrantRequest();
 }, 1000);
 
 void refresh();

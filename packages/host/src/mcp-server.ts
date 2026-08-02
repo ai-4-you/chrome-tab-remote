@@ -3,14 +3,18 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { ActToolName, SnapshotFilter, ToolName } from '@ctr/shared';
+import type { ActToolName, PlanStep, SnapshotFilter, ToolName } from '@ctr/shared';
 import {
   ACT_TOOL_TIMEOUT_MS,
-  ActionResultSchema,
   ERROR_RECOVERY,
+  FindResultSchema,
   GrantListResultSchema,
-  renderActionResult,
+  PLAN_MAX_STEPS,
+  PlanResultSchema,
+  PlanStepSchema,
+  renderFindResult,
   renderGrants,
+  renderPlanResult,
   renderSnapshot,
   SNAPSHOT_FILTERS,
   SnapshotResultSchema,
@@ -117,16 +121,43 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
     },
     tabAction: async (
       tool: ActToolName,
-      args: { grantId?: string; ref: string; text?: string; value?: string },
+      args: { grantId?: string; ref?: string; text?: string; value?: string; steps?: PlanStep[] },
     ): Promise<CallToolResult> => {
       try {
-        const extra: Record<string, unknown> = { ref: args.ref };
+        const extra: Record<string, unknown> = {};
+        if (args.ref !== undefined) extra['ref'] = args.ref;
         if (args.text !== undefined) extra['text'] = args.text;
         if (args.value !== undefined) extra['value'] = args.value;
+        if (args.steps !== undefined) extra['steps'] = args.steps;
         // Long per-call timeout: the user-approval wait happens inside this call.
         const raw = await bridge.callTool(tool, grantParams(args.grantId, extra), ACT_TOOL_TIMEOUT_MS);
-        const parsed = ActionResultSchema.safeParse(raw);
-        return parsed.success ? textResult(renderActionResult(parsed.data)) : okResult(raw);
+        const parsed = PlanResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderPlanResult(parsed.data)) : okResult(raw);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    tabFind: async (args: { grantId?: string; query: string; role?: string }): Promise<CallToolResult> => {
+      try {
+        const extra: Record<string, unknown> = { query: args.query };
+        if (args.role !== undefined) extra['role'] = args.role;
+        const raw = await bridge.callTool('tab_find', grantParams(args.grantId, extra));
+        const parsed = FindResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderFindResult(parsed.data)) : okResult(raw);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    requestGrant: async (args: { reason?: string; mode?: string }): Promise<CallToolResult> => {
+      try {
+        const params: Record<string, unknown> = {};
+        if (args.reason !== undefined) params['reason'] = args.reason;
+        if (args.mode !== undefined) params['mode'] = args.mode;
+        const raw = await bridge.callTool('request_grant', params, ACT_TOOL_TIMEOUT_MS);
+        const parsed = GrantListResultSchema.safeParse(raw);
+        return parsed.success
+          ? textResult(`Granted:\n${renderGrants(parsed.data.grants, now())}`)
+          : okResult(raw);
       } catch (error) {
         return errorResult(error);
       }
@@ -263,6 +294,76 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
       },
     },
     ({ grantId, ref, value }) => handlers.tabAction('tab_select', { grantId, ref, value }),
+  );
+
+  server.registerTool(
+    'tab_plan',
+    {
+      description:
+        'Execute a SHORT plan of actions (click/fill/select) as ONE user approval: the user ' +
+        'sees the full numbered step list and approves it as a whole; execution then runs in ' +
+        'order and STOPS at the first failure (honest partial report). Prefer this over many ' +
+        'single-action calls for form-fill flows — one interruption instead of N. Steps are ' +
+        'frozen at approval: you cannot deviate. All refs must come from the LATEST snapshot; ' +
+        'a step whose element was changed by an earlier step fails with stale_ref. ' +
+        `${ACT_COMMON}`,
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        steps: z
+          .array(PlanStepSchema)
+          .min(1)
+          .max(PLAN_MAX_STEPS)
+          .describe(
+            `1–${PLAN_MAX_STEPS} steps: {kind: "click"|"fill"|"select", ref, text? (fill), value? (select)}.`,
+          ),
+      },
+    },
+    ({ grantId, steps }) => handlers.tabAction('tab_plan', { grantId, steps }),
+  );
+
+  server.registerTool(
+    'tab_find',
+    {
+      description:
+        'Search the granted tab for elements whose name, value, or URL contains the query ' +
+        '(case-insensitive), optionally filtered by role (e.g. "button", "link", "textbox"). ' +
+        'Returns matching nodes as snapshot lines. Much cheaper than reading a full ' +
+        'tab_snapshot on large pages. IMPORTANT: tab_find takes a fresh snapshot internally — ' +
+        'all refs from earlier snapshots become stale; use the returned refs.',
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        query: z.string().min(1).describe('Substring to search for, e.g. "login".'),
+        role: z.string().optional().describe('Optional role filter, e.g. "button".'),
+      },
+    },
+    ({ grantId, query, role }) => handlers.tabFind({ grantId, query, role }),
+  );
+
+  server.registerTool(
+    'request_grant',
+    {
+      description:
+        'Ask the user to share a tab when you have none (no_grant errors): shows a request ' +
+        'card in the side panel plus a system notification, with your reason. The user then ' +
+        'grants a tab of THEIR choice via the normal grant flow — you never pick the tab. ' +
+        'This call waits up to ~2 minutes for the decision and returns the granted tab, or ' +
+        'an error if the user dismissed it or the window expired. If a grant already exists, ' +
+        'it returns immediately. State the mode you actually need: if your task involves ' +
+        'clicking/filling, request mode "act" — otherwise you will get an observe-only grant ' +
+        'and act tools will fail with observe_only. The mode is a hint; the user decides.',
+      inputSchema: {
+        reason: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('One short sentence shown verbatim to the user: why you need a tab.'),
+        mode: z
+          .enum(['observe', 'act'])
+          .optional()
+          .describe('Capability you need: "observe" (read-only, default) or "act" (clicks/fills, user-approved).'),
+      },
+    },
+    ({ reason, mode }) => handlers.requestGrant({ reason, mode }),
   );
 
   return server;

@@ -74,7 +74,7 @@ The agent never sees raw DOM or screenshots. The content script produces a struc
 
 All tool results are prose-shaped (principle in `AGENTS.md`): `tab_read` returns the element text plainly (no JSON envelope), `list_grants` renders one line per grant with expiry as derived minutes and turns the empty list into the no_grant recovery instruction.
 
-**Later candidates (ranked, not yet built):** `tab_find(query, role?)` returning matching refs; snapshot ids + `stale_ref` errors instead of silently serving old refs; subtree scoping (`tab_snapshot(scope: ref)`); `wait_for` and snapshot diffs once actions exist; MCP `structuredContent` + `outputSchema` alongside the text if programmatic consumers ever need it.
+**Later candidates — status 2026-08-02:** ~~`tab_find`~~ ✅ built; ~~stale-ref protection~~ ✅ built (monotonic refs); ~~`wait_for`~~ ✅ superseded by C-11 (action results embed a post-settle snapshot with honest confidence); ~~batch approval~~ ✅ built as `tab_plan` (C-10). Still open: subtree scoping (`tab_snapshot(scope: ref)`); snapshot diffs; MCP `structuredContent` + `outputSchema` alongside the text if programmatic consumers ever need it.
 
 **Stage 2 prerequisite:** `combobox` is a leaf role, so `<select>` options are invisible in snapshots. Expose the option list (values + labels) before implementing `select(ref, value)` — an agent cannot choose a value it cannot see.
 

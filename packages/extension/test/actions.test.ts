@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { executeAction } from '../src/content/actions.js';
+import { executeAction, executePlan } from '../src/content/actions.js';
+import { waitForQuiet } from '../src/content/settle.js';
+import { captureSnapshot } from '../src/content/snapshot.js';
 
 function el<T extends Element>(selector: string): T {
   const found = document.querySelector<T>(selector);
@@ -124,5 +126,92 @@ describe('executeAction', () => {
       document.body.innerHTML = '<button>Save</button>';
       expect(executeAction(el('button'), { kind: 'select', ref: 'n1', value: 'x' }).ok).toBe(false);
     });
+  });
+});
+
+describe('executePlan', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  function refOf(tag: string, name: string, capture: ReturnType<typeof captureSnapshot>): string {
+    for (const [ref, element] of capture.refMap) {
+      if (
+        element.tagName.toLowerCase() === tag &&
+        (element.textContent?.trim() === name || element.getAttribute('aria-label') === name)
+      ) {
+        return ref;
+      }
+    }
+    throw new Error(`no ref for ${tag} ${name}`);
+  }
+
+  it('executes steps in order and reports all results', () => {
+    document.body.innerHTML = '<input aria-label="Name" type="text" /><button>Save</button>';
+    const capture = captureSnapshot(document);
+    const fillRef = refOf('input', 'Name', capture);
+    const clickRef = refOf('button', 'Save', capture);
+    const clicked = vi.fn();
+    el('button').addEventListener('click', clicked);
+
+    const { executed, failedStep } = executePlan(capture.refMap, 0, [
+      { kind: 'fill', ref: fillRef, text: 'Ada' },
+      { kind: 'click', ref: clickRef },
+    ]);
+    expect(failedStep).toBeUndefined();
+    expect(executed.map((r) => r.action)).toEqual(['fill', 'click']);
+    expect(el<HTMLInputElement>('input').value).toBe('Ada');
+    expect(clicked).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at the first failure; later steps never run', () => {
+    document.body.innerHTML = '<button>A</button><button>B</button>';
+    const capture = captureSnapshot(document);
+    const clickedB = vi.fn();
+    document.querySelectorAll('button')[1]!.addEventListener('click', clickedB);
+
+    const { executed, failedStep } = executePlan(capture.refMap, 0, [
+      { kind: 'fill', ref: refOf('button', 'A', capture), text: 'x' }, // fill a button → fails
+      { kind: 'click', ref: refOf('button', 'B', capture) },
+    ]);
+    expect(executed).toHaveLength(0);
+    expect(failedStep?.index).toBe(0);
+    expect(failedStep?.code).toBe('invalid_target');
+    expect(clickedB).not.toHaveBeenCalled();
+  });
+
+  it('fails with stale_ref when an earlier step detached the element', () => {
+    document.body.innerHTML = '<button id="a">A</button><button id="b">B</button>';
+    const capture = captureSnapshot(document);
+    const refA = refOf('button', 'A', capture);
+    const refB = refOf('button', 'B', capture);
+    // Step 1's click removes button B from the DOM (SPA-style re-render).
+    document.getElementById('a')!.addEventListener('click', () => document.getElementById('b')!.remove());
+
+    const { executed, failedStep } = executePlan(capture.refMap, 0, [
+      { kind: 'click', ref: refA },
+      { kind: 'click', ref: refB },
+    ]);
+    expect(executed).toHaveLength(1);
+    expect(failedStep).toMatchObject({ index: 1, code: 'stale_ref' });
+  });
+});
+
+describe('waitForQuiet (DOM settle heuristic)', () => {
+  it('resolves settled=true when the DOM goes quiet', async () => {
+    document.body.innerHTML = '<div id="x"></div>';
+    const promise = waitForQuiet(document, 30, 500);
+    document.getElementById('x')!.textContent = 'changed';
+    await expect(promise).resolves.toBe(true);
+  });
+
+  it('resolves settled=false (honest) when mutations never stop before the cap', async () => {
+    document.body.innerHTML = '<div id="x"></div>';
+    const interval = setInterval(() => {
+      document.getElementById('x')!.textContent = String(Math.random());
+    }, 10);
+    const settled = await waitForQuiet(document, 50, 200);
+    clearInterval(interval);
+    expect(settled).toBe(false);
   });
 });

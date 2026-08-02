@@ -1,17 +1,22 @@
-// Approval gate — every mutating action pauses here until the user decides in
-// the side panel. Strict mode: ONE pending approval at a time, per-action.
-// Timeouts fail closed (no decision = denial-shaped result for the agent).
-import { APPROVAL_TIMEOUT_MS, type ActToolName } from '@ctr/shared';
+// Approval gate — every mutating plan pauses here until the user decides in
+// the side panel. A single action is a 1-step plan (C-10); the approved plan
+// is FROZEN — the agent cannot deviate from the listed steps. ONE pending
+// approval at a time; timeouts fail closed.
+import { APPROVAL_TIMEOUT_MS } from '@ctr/shared';
 
-export interface PendingApproval {
-  opId: string;
-  tool: ActToolName;
-  ref: string;
+export interface ApprovalStep {
+  kind: 'click' | 'fill' | 'select';
   /** Human description of the target element, e.g. 'button "Save"'. */
   target: string;
   /** What would be typed/chosen — shown verbatim to the user before approving. */
   detail?: string;
-  /** Origin of the granted tab the action would run in. */
+}
+
+export interface PendingApproval {
+  opId: string;
+  /** The frozen steps the user approves as a whole. */
+  steps: ApprovalStep[];
+  /** Origin of the granted tab the plan would run in. */
   origin: string;
   /** Epoch ms when the request auto-times-out. */
   deadline: number;

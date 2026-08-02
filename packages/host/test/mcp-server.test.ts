@@ -161,23 +161,20 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toContain('timeout:');
   });
 
-  it('action tools render prose with the stale-refs hint and pass the long approval timeout', async () => {
-    const callTool = vi.fn(async () => ({ action: 'click', ref: 'n7', target: 'button "Save"' }));
+  it('action tools render the plan result and pass the long approval timeout', async () => {
+    const callTool = vi.fn(async () => ({
+      executed: [{ action: 'click', ref: 'n7', target: 'button "Save"' }],
+      pageState: 'settled',
+    }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     const result = await handlers.tabAction('tab_click', { ref: 'n7' });
     expect(callTool).toHaveBeenCalledWith('tab_click', { ref: 'n7' }, 120_000);
-    expect(textOf(result)).toBe(
-      'Clicked button "Save" (n7). The page may have changed — take a new tab_snapshot before further actions.',
-    );
+    expect(textOf(result)).toContain('1. Clicked button "Save" (n7)');
+    expect(textOf(result)).toContain('Page settled');
   });
 
   it('action tools forward text/value and an explicit grantId', async () => {
-    const callTool = vi.fn(async () => ({
-      action: 'fill',
-      ref: 'n5',
-      target: 'textbox "Search"',
-      text: 'apples',
-    }));
+    const callTool = vi.fn(async () => ({ executed: [], pageState: 'interrupted' }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     await handlers.tabAction('tab_fill', { grantId: GRANT.grantId, ref: 'n5', text: 'apples' });
     expect(callTool).toHaveBeenCalledWith(
@@ -185,6 +182,49 @@ describe('createToolHandlers', () => {
       { grantId: GRANT.grantId, ref: 'n5', text: 'apples' },
       120_000,
     );
+  });
+
+  it('tab_plan forwards frozen steps under the approval timeout', async () => {
+    const callTool = vi.fn(async () => ({
+      executed: [
+        { action: 'fill', ref: 'n5', target: 'textbox "Name"', text: 'x' },
+        { action: 'click', ref: 'n7', target: 'button "Save"' },
+      ],
+      pageState: 'still-changing',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const steps = [
+      { kind: 'fill' as const, ref: 'n5', text: 'x' },
+      { kind: 'click' as const, ref: 'n7' },
+    ];
+    const result = await handlers.tabAction('tab_plan', { steps });
+    expect(callTool).toHaveBeenCalledWith('tab_plan', { steps }, 120_000);
+    expect(textOf(result)).toContain('2. Clicked button "Save" (n7)');
+    expect(textOf(result)).toContain('STILL CHANGING');
+  });
+
+  it('tab_find renders matches with the fresh-refs warning', async () => {
+    const callTool = vi.fn(async () => ({
+      url: 'https://docs.example.com/',
+      title: 'Docs',
+      total: 1,
+      matches: [{ ref: 'n52', role: 'button', name: 'Login' }],
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabFind({ query: 'login', role: 'button' });
+    expect(callTool).toHaveBeenCalledWith('tab_find', { query: 'login', role: 'button' });
+    expect(textOf(result)).toContain('- n52 button "Login"');
+    expect(textOf(result)).toContain('earlier refs are stale');
+  });
+
+  it('request_grant renders the granted result via the grants prose', async () => {
+    const callTool = vi.fn(async () => ({ grants: [GRANT] }));
+    const now = () => Date.parse(GRANT.expiresAt) - 5 * 60 * 1000;
+    const handlers = createToolHandlers(stubBridge({ callTool }), now);
+    const result = await handlers.requestGrant({ reason: 'need to read the docs page' });
+    expect(callTool).toHaveBeenCalledWith('request_grant', { reason: 'need to read the docs page' }, 120_000);
+    expect(textOf(result)).toContain('Granted:');
+    expect(textOf(result)).toContain('observe grant for https://docs.example.com');
   });
 
   it('action denials carry the recovery instruction', async () => {

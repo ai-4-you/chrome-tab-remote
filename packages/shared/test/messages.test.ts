@@ -27,10 +27,13 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
     expect(TOOL_NAMES).toEqual([
       'tab_snapshot',
       'tab_read',
+      'tab_find',
       'list_grants',
+      'request_grant',
       'tab_click',
       'tab_fill',
       'tab_select',
+      'tab_plan',
     ]);
   });
 

@@ -15,6 +15,11 @@
 - **Stage 2 implemented per `REQUIREMENTS.md` §7** (uncommitted): 'act' grants (side-panel checkbox), `tab_click`/`tab_fill`/`tab_select` on snapshot refs, per-action approval gate in the side panel (110 s auto-deny, one at a time, post-approval grant re-validation), monotonic refs → `stale_ref` by construction (rejected before the user is asked), `<select>` options on combobox nodes, password-fill refusal, action audit events, prose action results, host per-call timeout (120 s for act tools). 193 tests, precommit green, built.
 - New error codes: `stale_ref`, `invalid_target`, `observe_only`, `approval_denied`, `approval_timeout` — all with recovery texts.
 
+## Assist package (2026-08-02, from "what would help user+agent" ideation)
+
+- **Implemented (unit-tested, 222 tests; live verification pending reload):** approval notifications + red toolbar badge (T-1; fixes the 4-timeout pain), plan approval with single-action unification (C-10, `tab_plan`, frozen steps, honest partial failure), post-action settle + embedded fresh snapshot with honest `settled/still-changing/interrupted` confidence (C-11, no auto-retry of plans), `request_grant` (T-2, agent asks / user picks the tab), `tab_find` (O-9). New extension icon (generated PNG, also used by notifications); manifest gains `notifications` permission and updated description.
+- **Live-verified 2026-08-02:** 2-step `tab_plan` approved as one card (screenshot: `docs/screenshots/side-panel-tab-scoped-approval.png`, embedded in README); `interrupted` honesty path (click navigated mid-plan → unknown-steps warning + fresh snapshot); `settled` path (fill → settled + inline snapshot); `request_grant` full round trip (revoke → agent asks with reason → user grants → call returns grant); `tab_find` with fresh-refs warning. **User decision: system notifications are best-effort** (macOS suppresses them by default) — the red toolbar badge + panel card are the guaranteed attention signals (T-1 updated).
+
 ## Next actions
 
 1. ✅ Live E2E act test passed 2026-08-02: approve→real click (navigated /Montag→/Bauernliste), deny→approval_denied untouched, 4× timeout auto-deny, stale-world recovery after action, audit chain complete. Learning: approval needs the side panel visible — mcporter needs `--timeout 130000` (its 60 s default < our 110 s approval window).

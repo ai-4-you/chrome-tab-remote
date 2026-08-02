@@ -1,7 +1,9 @@
 // Content script — injected programmatically (chrome.scripting.executeScript)
 // into the ONE granted tab. Bundled as IIFE. Guards against double injection
 // (re-confirm re-injects into the same tab).
-import { executeAction, type ActionRequest } from './actions.js';
+import type { PlanStep, SnapshotNode } from '@ctr/shared';
+import { executePlan } from './actions.js';
+import { waitForQuiet } from './settle.js';
 import { captureSnapshot, classifyMissingRef, describeElement, readRef } from './snapshot.js';
 
 declare global {
@@ -85,29 +87,84 @@ if (!window.__ctrContentInjected) {
         return false;
       }
 
-      if (m.type === 'ctrAction') {
-        const action = m.action as ActionRequest | undefined;
-        if (!action || typeof action !== 'object' || typeof action.ref !== 'string') {
+      if (m.type === 'ctrPlan') {
+        const steps = (m as { steps?: unknown }).steps;
+        if (!Array.isArray(steps) || steps.length === 0) {
+          sendResponse({ ok: false, error: { code: 'invalid_target', message: 'Malformed plan request.' } });
+          return false;
+        }
+        if (!lastRefMap) {
           sendResponse({
             ok: false,
-            error: { code: 'invalid_target', message: 'Malformed action request.' },
+            error: { code: 'unknown_ref', message: 'No snapshot captured yet — call tab_snapshot first.' },
           });
           return false;
         }
-        const el = lookupRef(action.ref, sendResponse);
-        if (!el) return false;
-        try {
-          const outcome = executeAction(el, action);
-          if (outcome.ok) {
-            sendResponse({ ok: true, result: outcome.result });
-          } else {
-            sendResponse({ ok: false, error: { code: outcome.code, message: outcome.message } });
+        const map = lastRefMap;
+        void (async () => {
+          try {
+            const { executed, failedStep } = executePlan(map, refBase, steps as PlanStep[]);
+            if (executed.length === 0 && failedStep) {
+              // Nothing happened: report a plain error (single-action ergonomics).
+              sendResponse({ ok: false, error: { code: failedStep.code, message: failedStep.message } });
+              return;
+            }
+            // Wait for the DOM to go quiet (honestly capped), then re-orient.
+            const settled = await waitForQuiet(document);
+            const capture = captureSnapshot(document, 'interactive', nextStart);
+            lastRefMap = capture.refMap;
+            refBase = nextStart;
+            nextStart = capture.nextStart;
+            sendResponse({
+              ok: true,
+              result: {
+                executed,
+                failedStep,
+                pageState: settled ? 'settled' : 'still-changing',
+                snapshot: capture.result,
+              },
+            });
+          } catch (e) {
+            sendResponse({ ok: false, error: { code: 'tab_unreachable', message: `Plan failed: ${String(e)}` } });
           }
-        } catch (e) {
+        })();
+        return true; // async sendResponse
+      }
+
+      if (m.type === 'ctrFind') {
+        try {
+          const query = typeof (m as { query?: unknown }).query === 'string'
+            ? ((m as { query: string }).query).toLowerCase()
+            : '';
+          const role = typeof (m as { role?: unknown }).role === 'string'
+            ? (m as { role: string }).role
+            : undefined;
+          const capture = captureSnapshot(document, 'full', nextStart);
+          lastRefMap = capture.refMap;
+          refBase = nextStart;
+          nextStart = capture.nextStart;
+          const flat: SnapshotNode[] = [];
+          (function walk(node: SnapshotNode): void {
+            flat.push(node);
+            for (const child of node.children ?? []) walk(child);
+          })(capture.result.tree);
+          const matching = flat.filter(
+            (node) =>
+              (!role || node.role === role) &&
+              (query === '' ||
+                `${node.name} ${node.value ?? ''} ${node.href ?? ''}`.toLowerCase().includes(query)),
+          );
           sendResponse({
-            ok: false,
-            error: { code: 'tab_unreachable', message: `Action failed: ${String(e)}` },
+            ok: true,
+            result: {
+              url: capture.result.url,
+              title: capture.result.title,
+              total: matching.length,
+              matches: matching.slice(0, 30).map(({ children: _children, ...rest }) => rest),
+            },
           });
+        } catch (e) {
+          sendResponse({ ok: false, error: { code: 'tab_unreachable', message: `Find failed: ${String(e)}` } });
         }
         return false;
       }

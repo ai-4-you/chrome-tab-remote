@@ -11,6 +11,11 @@ import {
 } from '../src/background/grant-store.js';
 import { getAudit } from '../src/background/audit.js';
 import { decideApproval, getPendingApproval } from '../src/background/approvals.js';
+import {
+  dismissGrantRequest,
+  getPendingGrantRequest,
+  grantRequestGranted,
+} from '../src/background/grant-requests.js';
 import { handleToolCall } from '../src/background/router.js';
 
 const ORIGIN = 'https://app.example.com';
@@ -217,7 +222,10 @@ describe('router', () => {
   });
 
   describe('act tools (approval gate)', () => {
-    const ACTION_RESULT = { action: 'click', ref: 'n7', target: 'button "Save"' };
+    const ACTION_RESULT = {
+      executed: [{ action: 'click', ref: 'n7', target: 'button "Save"' }],
+      pageState: 'settled',
+    };
 
     afterEach(() => {
       const pending = getPendingApproval();
@@ -246,7 +254,10 @@ describe('router', () => {
       const promise = handleToolCall(call('tab_click', { ref: 'n7' }));
       await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
       const pending = getPendingApproval()!;
-      expect(pending).toMatchObject({ tool: 'tab_click', ref: 'n7', target: 'button "Save"', origin: ORIGIN });
+      expect(pending).toMatchObject({
+        steps: [{ kind: 'click', target: 'button "Save"' }],
+        origin: ORIGIN,
+      });
       decideApproval(pending.opId, true);
 
       const res = await promise;
@@ -255,8 +266,8 @@ describe('router', () => {
       expect(res.result).toEqual(ACTION_RESULT);
       expect(mock.tabs.sendMessage).toHaveBeenNthCalledWith(1, 1, { type: 'ctrDescribe', ref: 'n7' });
       expect(mock.tabs.sendMessage).toHaveBeenNthCalledWith(2, 1, {
-        type: 'ctrAction',
-        action: { kind: 'click', ref: 'n7' },
+        type: 'ctrPlan',
+        steps: [{ kind: 'click', ref: 'n7' }],
       });
 
       const auditEntries = await getAudit();
@@ -289,7 +300,7 @@ describe('router', () => {
       mock.tabs.sendMessage.mockResolvedValueOnce({ ok: true, result: { target: 'textbox "Search"' } });
       const promise = handleToolCall(call('tab_fill', { ref: 'n5', text: 'apples' }));
       await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
-      expect(getPendingApproval()!.detail).toBe('type "apples"');
+      expect(getPendingApproval()!.steps[0]?.detail).toBe('type "apples"');
       decideApproval(getPendingApproval()!.opId, false);
       await promise;
     });
@@ -346,6 +357,48 @@ describe('router', () => {
       expectError(await promise, 'approval_denied');
     });
 
+    it('tab_plan: one approval for the whole frozen step list, executed as one ctrPlan', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage
+        .mockResolvedValueOnce({ ok: true, result: { target: 'textbox "Name"' } }) // describe step 1
+        .mockResolvedValueOnce({ ok: true, result: { target: 'button "Save"' } }) // describe step 2
+        .mockResolvedValueOnce({
+          ok: true,
+          result: {
+            executed: [
+              { action: 'fill', ref: 'n5', target: 'textbox "Name"', text: 'Ada' },
+              { action: 'click', ref: 'n7', target: 'button "Save"' },
+            ],
+            pageState: 'settled',
+          },
+        });
+
+      const steps = [
+        { kind: 'fill', ref: 'n5', text: 'Ada' },
+        { kind: 'click', ref: 'n7' },
+      ];
+      const promise = handleToolCall(call('tab_plan', { steps }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      const pending = getPendingApproval()!;
+      expect(pending.steps).toEqual([
+        { kind: 'fill', target: 'textbox "Name"', detail: 'type "Ada"' },
+        { kind: 'click', target: 'button "Save"', detail: undefined },
+      ]);
+      decideApproval(pending.opId, true);
+
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      expect(mock.tabs.sendMessage).toHaveBeenLastCalledWith(1, { type: 'ctrPlan', steps });
+    });
+
+    it('tab_plan rejects malformed step lists before any tab contact', async () => {
+      await mintActGrant();
+      expectError(await handleToolCall(call('tab_plan', { steps: [] })), 'invalid_target');
+      expectError(await handleToolCall(call('tab_plan', { steps: [{ kind: 'jump', ref: 'n1' }] })), 'invalid_target');
+      expectError(await handleToolCall(call('tab_plan', { steps: [{ kind: 'fill', ref: 'n1' }] })), 'invalid_target');
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+
     it('reports busy as approval_timeout while another approval is pending', async () => {
       await mintActGrant();
       mock.tabs.sendMessage.mockResolvedValue({ ok: true, result: { target: 'button "Save"' } });
@@ -355,6 +408,66 @@ describe('router', () => {
       expectError(second, 'approval_timeout');
       decideApproval(getPendingApproval()!.opId, false);
       await first;
+    });
+  });
+
+  describe('tab_find', () => {
+    it('forwards query and role to the content script', async () => {
+      const grant = await mintGrant(1, ORIGIN);
+      mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+      mock.tabs.sendMessage.mockResolvedValue({
+        ok: true,
+        result: { url: `${ORIGIN}/`, title: 'X', total: 0, matches: [] },
+      });
+      const res = await handleToolCall(call('tab_find', { grantId: grant.grantId, query: 'login', role: 'button' }));
+      expect(res.ok).toBe(true);
+      expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrFind', query: 'login', role: 'button' });
+    });
+
+    it('rejects a missing query', async () => {
+      await mintGrant(1, ORIGIN);
+      mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+      expectError(await handleToolCall(call('tab_find')), 'unknown_ref');
+    });
+  });
+
+  describe('request_grant', () => {
+    afterEach(() => {
+      dismissGrantRequest();
+    });
+
+    it('returns the existing grant immediately when one is active', async () => {
+      const grant = await mintGrant(1, ORIGIN);
+      const res = await handleToolCall(call('request_grant'));
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.result).toEqual({ grants: [grant] });
+      expect(getPendingGrantRequest()).toBeNull();
+    });
+
+    it('posts a pending request with reason + requested mode and resolves when the user grants', async () => {
+      const promise = handleToolCall(call('request_grant', { reason: 'need the docs page', mode: 'act' }));
+      await vi.waitFor(() => expect(getPendingGrantRequest()).not.toBeNull());
+      expect(getPendingGrantRequest()?.reason).toBe('need the docs page');
+      expect(getPendingGrantRequest()?.requestedMode).toBe('act');
+
+      const grant = await mintGrant(1, ORIGIN); // the user grants a tab of their choice
+      grantRequestGranted();
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.result).toEqual({ grants: [grant] });
+    });
+
+    it('defaults the requested mode to observe and fails closed on dismissal', async () => {
+      const promise = handleToolCall(call('request_grant'));
+      await vi.waitFor(() => expect(getPendingGrantRequest()).not.toBeNull());
+      expect(getPendingGrantRequest()?.requestedMode).toBe('observe');
+      expect(dismissGrantRequest()).toBe(true);
+      const res = await promise;
+      expectError(res, 'no_grant');
+      if (res.ok) return;
+      expect(res.error.message).toContain('dismissed');
     });
   });
 });

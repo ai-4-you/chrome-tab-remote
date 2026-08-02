@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ERROR_CODES,
   ERROR_RECOVERY,
-  renderActionResult,
+  renderActionLine,
+  renderFindResult,
   renderGrants,
+  renderPlanResult,
   renderSnapshot,
   type Grant,
   type SnapshotResult,
@@ -132,17 +134,71 @@ describe('renderGrants', () => {
   });
 });
 
-describe('renderActionResult', () => {
-  it('renders each action verb with the target and the stale-refs hint', () => {
-    expect(renderActionResult({ action: 'click', ref: 'n7', target: 'button "Save"' })).toBe(
-      'Clicked button "Save" (n7). The page may have changed — take a new tab_snapshot before further actions.',
+describe('renderActionLine / renderPlanResult', () => {
+  const CLICK = { action: 'click' as const, ref: 'n7', target: 'button "Save"' };
+
+  it('renders each action verb with the target', () => {
+    expect(renderActionLine(CLICK)).toBe('Clicked button "Save" (n7)');
+    expect(renderActionLine({ action: 'fill', ref: 'n5', target: 'textbox "Search"', text: 'apples' })).toBe(
+      'Filled textbox "Search" with "apples" (n5)',
     );
-    expect(
-      renderActionResult({ action: 'fill', ref: 'n5', target: 'textbox "Search"', text: 'apples' }),
-    ).toContain('Filled textbox "Search" with "apples" (n5).');
-    expect(
-      renderActionResult({ action: 'select', ref: 'n9', target: 'combobox "Color"', value: 'green' }),
-    ).toContain('Selected "green" in combobox "Color" (n9).');
+    expect(renderActionLine({ action: 'select', ref: 'n9', target: 'combobox "Color"', value: 'g' })).toBe(
+      'Selected "g" in combobox "Color" (n9)',
+    );
+  });
+
+  it('renders a settled plan with numbered steps and the embedded snapshot', () => {
+    const text = renderPlanResult({ executed: [CLICK], pageState: 'settled', snapshot: base });
+    expect(text).toContain('1. Clicked button "Save" (n7)');
+    expect(text).toContain('Page settled after the action(s).');
+    expect(text).toContain('fresh refs — ALL earlier refs are stale');
+    expect(text).toContain('url: https://app.example.com/');
+  });
+
+  it('renders partial failure honestly: failed step + no further execution', () => {
+    const text = renderPlanResult({
+      executed: [CLICK],
+      failedStep: { index: 1, code: 'stale_ref', message: 'Element gone.' },
+      pageState: 'settled',
+    });
+    expect(text).toContain('Step 2 FAILED (stale_ref): Element gone. — remaining steps were not executed.');
+  });
+
+  it('warns loudly when the page was still changing (never fakes settledness)', () => {
+    const text = renderPlanResult({ executed: [CLICK], pageState: 'still-changing' });
+    expect(text).toContain('STILL CHANGING');
+    expect(text).toContain('may be incomplete');
+  });
+
+  it('reports interruption with unknown completed-step count', () => {
+    const text = renderPlanResult({ executed: [], pageState: 'interrupted', snapshot: base });
+    expect(text).toContain('INTERRUPTED');
+    expect(text).toContain('unknown');
+    expect(text).not.toContain('1. Clicked');
+  });
+});
+
+describe('renderFindResult', () => {
+  it('renders matches as snapshot lines with the fresh-refs warning', () => {
+    const text = renderFindResult({
+      url: 'https://app.example.com/',
+      title: 'Example',
+      total: 2,
+      matches: [
+        { ref: 'n52', role: 'button', name: 'Login' },
+        { ref: 'n60', role: 'link', name: 'Login help', href: 'https://app.example.com/help' },
+      ],
+    });
+    expect(text).toContain('2 match(es)');
+    expect(text).toContain('- n52 button "Login"');
+    expect(text).toContain('- n60 link "Login help" https://app.example.com/help');
+    expect(text).toContain('earlier refs are stale');
+  });
+
+  it('gives a helpful zero-matches message', () => {
+    const text = renderFindResult({ url: 'https://x.example/', title: 'X', total: 0, matches: [] });
+    expect(text).toContain('No matches');
+    expect(text).toContain('fresh snapshot');
   });
 });
 

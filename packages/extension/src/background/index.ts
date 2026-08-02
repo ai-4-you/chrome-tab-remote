@@ -10,6 +10,20 @@
 import type { Grant, GrantMode } from '@ctr/shared';
 import { ToolCallRequestSchema } from '@ctr/shared';
 import { decideApproval, getPendingApproval, setApprovalNotifier } from './approvals.js';
+import {
+  dismissGrantRequest,
+  getPendingGrantRequest,
+  grantRequestGranted,
+  setGrantRequestNotifier,
+} from './grant-requests.js';
+import {
+  clearApprovalNotification,
+  clearGrantRequestNotification,
+  setAttentionBadge,
+  showApprovalNotification,
+  showGrantRequestNotification,
+  wireNotificationClicks,
+} from './notifications.js';
 import { appendAudit, getAudit, setAuditForwarder } from './audit.js';
 import {
   getGrant,
@@ -42,8 +56,38 @@ function notifySidePanel(): void {
   void chrome.runtime.sendMessage({ type: 'ctrStateChanged' }).catch(() => undefined);
 }
 
-// Approval-state transitions re-render the panel (shows/hides the approval card).
-setApprovalNotifier(notifySidePanel);
+// Approval / request transitions: re-render the panel AND raise out-of-panel
+// attention (system notification + toolbar badge) — the gate must work even
+// when the side panel is not visible.
+function updateAttention(): void {
+  const approval = getPendingApproval();
+  const request = getPendingGrantRequest();
+  setAttentionBadge(!!approval || !!request);
+  if (approval) {
+    const summary = approval.steps
+      .map((s) => `${s.kind} ${s.target}${s.detail ? ` (${s.detail})` : ''}`)
+      .join('; ');
+    showApprovalNotification(summary, approval.origin);
+  } else {
+    clearApprovalNotification();
+  }
+  if (request) {
+    showGrantRequestNotification(request.reason, request.requestedMode);
+  } else {
+    clearGrantRequestNotification();
+  }
+}
+
+setApprovalNotifier(() => {
+  notifySidePanel();
+  updateAttention();
+});
+setGrantRequestNotifier(() => {
+  notifySidePanel();
+  updateAttention();
+});
+// Notification click → jump to the granted tab (approvals live there).
+wireNotificationClicks(async () => (await listGrants())[0]?.tabId);
 
 async function broadcastGrants(): Promise<void> {
   const grants = await listGrants();
@@ -110,6 +154,8 @@ async function grantActiveTab(tabId: number, mode: GrantMode): Promise<SidePanel
     return { ok: false, error: `Could not inject the content script into this tab. (${String(err)})` };
   }
   await appendAudit({ type: 'grant_created', grantId: grant.grantId, tabId, detail: `${origin} (${mode})` });
+  // A fresh grant answers any pending agent access request.
+  grantRequestGranted();
   await broadcastGrants();
   return { ok: true, grant };
 }
@@ -238,10 +284,14 @@ chrome.runtime.onMessage.addListener(
             grants,
             nativeStatus: getNativeStatus(),
             pendingApproval: getPendingApproval(),
+            pendingGrantRequest: getPendingGrantRequest(),
             grantedTab,
           });
         })();
         return true;
+      case 'ctrDismissGrantRequest':
+        sendResponse({ ok: dismissGrantRequest() });
+        return false;
       case 'ctrGrantActiveTab':
         if (typeof m.tabId !== 'number') {
           sendResponse({ ok: false, error: 'Missing tabId.' });

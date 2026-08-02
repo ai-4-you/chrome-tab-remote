@@ -1,8 +1,8 @@
 // Action executors — the ONLY code that mutates the page. Deliberately small:
 // click, fill, select on snapshot refs. No coordinates, no arbitrary JS.
 // Pure DOM functions — unit-tested under jsdom.
-import type { ActionResult } from '@ctr/shared';
-import { describeElement } from './snapshot.js';
+import type { ActionResult, PlanStep } from '@ctr/shared';
+import { classifyMissingRef, describeElement } from './snapshot.js';
 
 export type ActionRequest =
   | { kind: 'click'; ref: string }
@@ -12,6 +12,47 @@ export type ActionRequest =
 export type ActionOutcome =
   | { ok: true; result: ActionResult }
   | { ok: false; code: 'invalid_target'; message: string };
+
+export interface PlanExecution {
+  executed: ActionResult[];
+  /** First failure; steps after it were NOT executed. */
+  failedStep?: { index: number; code: string; message: string };
+}
+
+/**
+ * Execute plan steps sequentially against the latest snapshot's refMap,
+ * stopping at the first failure. Elements detached by earlier steps (SPA
+ * re-render) fail with stale_ref instead of acting on ghosts.
+ */
+export function executePlan(
+  refMap: Map<string, Element>,
+  refBase: number,
+  steps: PlanStep[],
+): PlanExecution {
+  const executed: ActionResult[] = [];
+  for (const [index, step] of steps.entries()) {
+    const el = refMap.get(step.ref);
+    if (!el) {
+      return { executed, failedStep: { index, ...classifyMissingRef(step.ref, refBase) } };
+    }
+    if (!el.isConnected) {
+      return {
+        executed,
+        failedStep: {
+          index,
+          code: 'stale_ref',
+          message: `Element for ${step.ref} is no longer part of the page (changed by an earlier step?). Take a new tab_snapshot.`,
+        },
+      };
+    }
+    const outcome = executeAction(el, step as ActionRequest);
+    if (!outcome.ok) {
+      return { executed, failedStep: { index, code: outcome.code, message: outcome.message } };
+    }
+    executed.push(outcome.result);
+  }
+  return { executed };
+}
 
 const CLICKABLE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'option', 'summary', 'label']);
 const UNFILLABLE_INPUT_TYPES = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'hidden', 'image']);
@@ -61,6 +102,9 @@ export function executeAction(el: Element, action: ActionRequest): ActionOutcome
   }
 
   if (action.kind === 'fill') {
+    if (typeof action.text !== 'string') {
+      return invalid('Missing text parameter for fill.');
+    }
     if (el instanceof HTMLInputElement) {
       const type = (el.getAttribute('type') ?? 'text').toLowerCase();
       if (type === 'password') {
@@ -81,6 +125,9 @@ export function executeAction(el: Element, action: ActionRequest): ActionOutcome
   }
 
   // select
+  if (typeof action.value !== 'string') {
+    return invalid('Missing value parameter for select.');
+  }
   if (!(el instanceof HTMLSelectElement)) {
     return invalid(`Element ${target} (${action.ref}) is not a <select>.`);
   }

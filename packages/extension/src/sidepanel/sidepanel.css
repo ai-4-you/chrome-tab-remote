@@ -193,9 +193,7 @@ h2 {
 
 .audit-detail {
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .hidden {
@@ -243,4 +241,30 @@ h2 {
   font-size: 12px;
   font-weight: 600;
   color: var(--danger);
+}
+
+#approval-detail {
+  white-space: pre-line;
+}
+
+.request-mode {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.request-mode-observe {
+  background: #e8eaf6;
+  color: #3f51b5;
+}
+
+.request-mode-act {
+  background: #fdecea;
+  color: var(--danger);
+}
+
+#request-section.request-act {
+  border: 1px solid var(--danger);
 }

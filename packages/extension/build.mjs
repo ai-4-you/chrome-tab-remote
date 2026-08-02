@@ -42,6 +42,7 @@ await build({
 // Static files.
 const statics = [
   ['manifest.json', 'manifest.json'],
+  ['icon128.png', 'icon128.png'],
   ['src/sidepanel/sidepanel.html', 'sidepanel.html'],
   ['src/sidepanel/sidepanel.css', 'sidepanel.css'],
 ];

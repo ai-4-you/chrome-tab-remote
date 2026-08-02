@@ -7,9 +7,11 @@
 //   5. observe tools: forward to the content script
 //      act tools: mode check -> describe target -> USER APPROVAL -> re-validate
 //      (the approval wait is long) -> execute
-import type { ErrorCode, Grant, ToolCallRequest, ToolResult } from '@ctr/shared';
-import { isActTool, isGrantUsable, ToolErrorSchema } from '@ctr/shared';
-import { proposeApproval } from './approvals.js';
+import type { ErrorCode, Grant, PlanStep, ToolCallRequest, ToolResult } from '@ctr/shared';
+import { isActTool, isGrantUsable, PLAN_MAX_STEPS, PlanStepSchema, ToolErrorSchema } from '@ctr/shared';
+import { z } from 'zod';
+import { proposeApproval, type ApprovalStep } from './approvals.js';
+import { proposeGrantRequest } from './grant-requests.js';
 import { getGrant, listGrants, revokeGrant, suspendGrant } from './grant-store.js';
 import { dropOriginPermission } from './origin-permission.js';
 import { appendAudit } from './audit.js';
@@ -123,6 +125,40 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
     return { res: okResult(req.id, { grants: await listGrants() }) };
   }
 
+  // request_grant works WITHOUT a grant — it is how the agent asks for one.
+  // The answer is always the user's normal grant gesture; this only carries
+  // the question (with reason) into the panel + a notification.
+  if (req.tool === 'request_grant') {
+    const existing = await listGrants();
+    if (existing[0]) {
+      return { res: okResult(req.id, { grants: existing }) };
+    }
+    const reason =
+      typeof req.params['reason'] === 'string' ? req.params['reason'].slice(0, 200) : undefined;
+    const requestedMode = req.params['mode'] === 'act' ? 'act' : 'observe';
+    await appendAudit({
+      type: 'grant_requested',
+      detail: `${requestedMode}${reason ? `: ${reason}` : ''}`,
+    });
+    const outcome = await proposeGrantRequest(reason, requestedMode);
+    if (outcome === 'granted') {
+      return { res: okResult(req.id, { grants: await listGrants() }) };
+    }
+    if (outcome === 'busy') {
+      return { res: errResult(req.id, 'no_grant', 'An access request is already pending — wait for it to resolve.') };
+    }
+    await appendAudit({ type: 'grant_request_dismissed', detail: outcome });
+    return {
+      res: errResult(
+        req.id,
+        'no_grant',
+        outcome === 'dismissed'
+          ? 'The user dismissed the access request.'
+          : 'No grant was given within the request window.',
+      ),
+    };
+  }
+
   // grantId is optional: with at most one grant by design, an omitted grantId
   // resolves to the single existing grant.
   const grantIdParam = req.params['grantId'];
@@ -150,10 +186,17 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   }
 
   // Observe tools.
-  let message: { type: string; ref?: string; filter?: string };
+  let message: { type: string; ref?: string; filter?: string; query?: string; role?: string };
   if (req.tool === 'tab_snapshot') {
     const filter = req.params['filter'] === 'interactive' ? 'interactive' : 'full';
     message = { type: 'ctrSnapshot', filter };
+  } else if (req.tool === 'tab_find') {
+    const query = req.params['query'];
+    if (typeof query !== 'string' || query.trim().length === 0) {
+      return { res: errResult(req.id, 'unknown_ref', 'Missing query parameter for tab_find.'), grantId, tabId };
+    }
+    message = { type: 'ctrFind', query };
+    if (typeof req.params['role'] === 'string') message.role = req.params['role'];
   } else {
     const ref = req.params['ref'];
     if (typeof ref !== 'string' || ref.length === 0) {
@@ -171,59 +214,107 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   return { res: mapContentResponse(req.id, resp), grantId, tabId };
 }
 
-/** The act path: mode gate → target description → user approval → re-validation → execution. */
+/** Wait for a navigating tab to finish loading (best effort, capped). */
+function waitForTabComplete(tabId: number, maxMs = 5000): Promise<void> {
+  return new Promise((resolve) => {
+    const listener = (id: number, info: { status?: string }): void => {
+      if (id === tabId && info.status === 'complete') done();
+    };
+    const done = (): void => {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    };
+    const timer = setTimeout(done, maxMs);
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+/** Human line for one step, shown in approvals and audit. */
+function stepDetail(step: PlanStep): string | undefined {
+  if (step.kind === 'fill') return `type ${JSON.stringify(step.text ?? '')}`;
+  if (step.kind === 'select') return `choose ${JSON.stringify(step.value ?? '')}`;
+  return undefined;
+}
+
+/**
+ * The act path (plan-unified, C-10): mode gate → build/validate steps →
+ * describe all targets (stale refs rejected before the user is asked) →
+ * gate (approval or auto-approve) → re-validation → sequential execution
+ * with settle + fresh snapshot, honest about interruptions.
+ */
 async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolResult> {
   if (grant.mode !== 'act') {
     return errResult(req.id, 'observe_only', 'The grant is observe-only; actions are not authorized.');
   }
-  if (!isActTool(req.tool)) {
-    return errResult(req.id, 'invalid_target', 'Not an action tool.');
-  }
-  const ref = req.params['ref'];
-  if (typeof ref !== 'string' || ref.length === 0) {
-    return errResult(req.id, 'unknown_ref', 'Missing ref parameter.');
-  }
 
-  // Build the action + the human detail shown to the user.
-  let action: { kind: 'click' | 'fill' | 'select'; ref: string; text?: string; value?: string };
-  let detail: string | undefined;
-  if (req.tool === 'tab_click') {
-    action = { kind: 'click', ref };
-  } else if (req.tool === 'tab_fill') {
-    const text = req.params['text'];
-    if (typeof text !== 'string') {
-      return errResult(req.id, 'invalid_target', 'Missing text parameter for tab_fill.');
+  // Build the frozen step list. Single-action tools are 1-step plans.
+  let steps: PlanStep[];
+  if (req.tool === 'tab_plan') {
+    const parsed = z.array(PlanStepSchema).min(1).max(PLAN_MAX_STEPS).safeParse(req.params['steps']);
+    if (!parsed.success) {
+      return errResult(
+        req.id,
+        'invalid_target',
+        `Invalid steps (1–${PLAN_MAX_STEPS} of {kind: click|fill|select, ref, text?, value?}): ${parsed.error.issues[0]?.message ?? 'schema mismatch'}`,
+      );
     }
-    action = { kind: 'fill', ref, text };
-    detail = `type ${JSON.stringify(text)}`;
+    steps = parsed.data;
   } else {
-    const value = req.params['value'];
-    if (typeof value !== 'string') {
-      return errResult(req.id, 'invalid_target', 'Missing value parameter for tab_select.');
+    const ref = req.params['ref'];
+    if (typeof ref !== 'string' || ref.length === 0) {
+      return errResult(req.id, 'unknown_ref', 'Missing ref parameter.');
     }
-    action = { kind: 'select', ref, value };
-    detail = `choose ${JSON.stringify(value)}`;
+    if (req.tool === 'tab_click') {
+      steps = [{ kind: 'click', ref }];
+    } else if (req.tool === 'tab_fill') {
+      const text = req.params['text'];
+      if (typeof text !== 'string') {
+        return errResult(req.id, 'invalid_target', 'Missing text parameter for tab_fill.');
+      }
+      steps = [{ kind: 'fill', ref, text }];
+    } else {
+      const value = req.params['value'];
+      if (typeof value !== 'string') {
+        return errResult(req.id, 'invalid_target', 'Missing value parameter for tab_select.');
+      }
+      steps = [{ kind: 'select', ref, value }];
+    }
+  }
+  for (const [i, step] of steps.entries()) {
+    if (step.kind === 'fill' && typeof step.text !== 'string') {
+      return errResult(req.id, 'invalid_target', `Step ${i + 1}: fill requires text.`);
+    }
+    if (step.kind === 'select' && typeof step.value !== 'string') {
+      return errResult(req.id, 'invalid_target', `Step ${i + 1}: select requires value.`);
+    }
   }
 
-  // Pre-approval peek: reject stale/unknown refs BEFORE bothering the user,
-  // and learn what the element is so the user approves an informed description.
-  let describeResp: unknown;
-  try {
-    describeResp = await sendToContentScript(grant.tabId, { type: 'ctrDescribe', ref });
-  } catch {
-    return errResult(req.id, 'tab_unreachable', 'Content script did not respond.');
+  // Pre-approval peek: describe EVERY target so the user approves an informed
+  // list, and stale/unknown refs never reach the user at all.
+  const approvalSteps: ApprovalStep[] = [];
+  for (const step of steps) {
+    let describeResp: unknown;
+    try {
+      describeResp = await sendToContentScript(grant.tabId, { type: 'ctrDescribe', ref: step.ref });
+    } catch {
+      return errResult(req.id, 'tab_unreachable', 'Content script did not respond.');
+    }
+    const described = mapContentResponse(req.id, describeResp);
+    if (!described.ok) return described;
+    const target =
+      typeof (described.result as { target?: unknown })?.target === 'string'
+        ? (described.result as { target: string }).target
+        : step.ref;
+    approvalSteps.push({ kind: step.kind, target, detail: stepDetail(step) });
   }
-  const described = mapContentResponse(req.id, describeResp);
-  if (!described.ok) return described;
-  const target =
-    typeof (described.result as { target?: unknown })?.target === 'string'
-      ? (described.result as { target: string }).target
-      : ref;
+  const proposedDetail = approvalSteps
+    .map((s, i) => `${i + 1}. ${s.kind} ${s.target}${s.detail ? ` — ${s.detail}` : ''}`)
+    .join('; ')
+    .slice(0, 400);
 
-  const proposedDetail = detail ? `${target} — ${detail}` : target;
-
-  // Auto-approve ("YOLO", C-9): read the CURRENT grant state at the gate — the
-  // user can flip the toggle at any moment and it must apply immediately.
+  // Gate: auto-approve ("Freaky mode", C-9) reads the CURRENT grant state —
+  // the user can flip the toggle at any moment and it applies per plan.
   const freshGrant = await getGrant(grant.grantId);
   if (freshGrant?.autoApprove === true && freshGrant.mode === 'act') {
     await appendAudit({
@@ -233,52 +324,51 @@ async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolRes
       tool: req.tool,
       detail: proposedDetail,
     });
-    let yoloResp: unknown;
-    try {
-      yoloResp = await sendToContentScript(grant.tabId, { type: 'ctrAction', action });
-    } catch {
-      return errResult(req.id, 'tab_unreachable', 'Content script did not respond.');
+  } else {
+    const opId = crypto.randomUUID();
+    await appendAudit({ type: 'action_proposed', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
+    const decision = await proposeApproval({ opId, steps: approvalSteps, origin: grant.origin });
+    if (decision === 'busy') {
+      return errResult(
+        req.id,
+        'approval_timeout',
+        "Another action is already awaiting the user's decision — retry after it resolves.",
+      );
     }
-    return mapContentResponse(req.id, yoloResp);
+    if (decision === 'denied') {
+      await appendAudit({ type: 'action_denied', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
+      return errResult(req.id, 'approval_denied', `The user declined: ${proposedDetail}.`);
+    }
+    if (decision === 'timeout') {
+      await appendAudit({ type: 'action_timeout', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
+      return errResult(req.id, 'approval_timeout', 'No user decision within the approval window.');
+    }
+    await appendAudit({ type: 'action_approved', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
+
+    // The approval wait can last minutes: re-validate everything before touching the tab.
+    const revalidated = await validateGrantForCall(req.id, grant.grantId);
+    if ('res' in revalidated) return revalidated.res;
   }
 
-  // Approval gate (C-3/C-4).
-  const opId = crypto.randomUUID();
-  await appendAudit({ type: 'action_proposed', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
-  const decision = await proposeApproval({
-    opId,
-    tool: req.tool,
-    ref,
-    target,
-    detail,
-    origin: grant.origin,
-  });
-  if (decision === 'busy') {
-    return errResult(
-      req.id,
-      'approval_timeout',
-      "Another action is already awaiting the user's decision — retry after it resolves.",
-    );
-  }
-  if (decision === 'denied') {
-    await appendAudit({ type: 'action_denied', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
-    return errResult(req.id, 'approval_denied', `The user declined: ${req.tool} on ${target}.`);
-  }
-  if (decision === 'timeout') {
-    await appendAudit({ type: 'action_timeout', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
-    return errResult(req.id, 'approval_timeout', 'No user decision within the approval window.');
-  }
-  await appendAudit({ type: 'action_approved', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
-
-  // The approval wait can last minutes: re-validate everything before touching the tab.
-  const revalidated = await validateGrantForCall(req.id, grant.grantId);
-  if ('res' in revalidated) return revalidated.res;
-
+  // Execute. NO auto-retry here: a lost channel usually means an action
+  // navigated the page — retrying would re-execute approved actions.
   let execResp: unknown;
   try {
-    execResp = await sendToContentScript(revalidated.grant.tabId, { type: 'ctrAction', action });
+    execResp = await chrome.tabs.sendMessage(grant.tabId, { type: 'ctrPlan', steps });
   } catch {
-    return errResult(req.id, 'tab_unreachable', 'Content script did not respond.');
+    await waitForTabComplete(grant.tabId);
+    let snapResp: unknown;
+    try {
+      snapResp = await sendToContentScript(grant.tabId, { type: 'ctrSnapshot', filter: 'interactive' });
+    } catch {
+      return errResult(req.id, 'tab_unreachable', 'The page did not recover after the action(s).');
+    }
+    const snapMapped = mapContentResponse(req.id, snapResp);
+    return okResult(req.id, {
+      executed: [],
+      pageState: 'interrupted',
+      snapshot: snapMapped.ok ? snapMapped.result : undefined,
+    });
   }
   return mapContentResponse(req.id, execResp);
 }

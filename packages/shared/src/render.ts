@@ -2,7 +2,7 @@
 // consumer is a language model, so readable text IS the machine format
 // (see AGENTS.md design principles).
 import type { Grant } from './grant.js';
-import type { ActionResult } from './messages.js';
+import type { ActionResult, FindResult, PlanResult } from './messages.js';
 import type { SnapshotNode, SnapshotResult } from './snapshot.js';
 
 function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
@@ -68,16 +68,66 @@ export function renderGrants(grants: Grant[], now: number): string {
     .join('\n');
 }
 
-/**
- * Render an executed action as prose with the next-step hint: any action can
- * mutate the page, so refs from before it must be treated as stale.
- */
-export function renderActionResult(result: ActionResult): string {
+/** One executed step as prose, e.g. 'Clicked button "Save" (n7)'. */
+export function renderActionLine(result: ActionResult): string {
   const verb =
     result.action === 'click'
       ? `Clicked ${result.target}`
       : result.action === 'fill'
         ? `Filled ${result.target} with ${JSON.stringify(result.text ?? '')}`
         : `Selected ${JSON.stringify(result.value ?? '')} in ${result.target}`;
-  return `${verb} (${result.ref}). The page may have changed — take a new tab_snapshot before further actions.`;
+  return `${verb} (${result.ref})`;
+}
+
+const PAGE_STATE_LINES: Record<PlanResult['pageState'], string> = {
+  settled: 'Page settled after the action(s).',
+  'still-changing':
+    'CAUTION: the page was STILL CHANGING when captured — the snapshot below may be ' +
+    'incomplete. If results look wrong, take a new tab_snapshot.',
+  interrupted:
+    'Execution was INTERRUPTED by a page navigation or reload (likely caused by an ' +
+    'action). How many steps completed before it is unknown — verify against the ' +
+    'snapshot below before doing anything else.',
+};
+
+/**
+ * Render a plan result: executed steps, first failure, honest page state, and
+ * the fresh snapshot (whose refs are the only valid ones now).
+ */
+export function renderPlanResult(result: PlanResult): string {
+  const out: string[] = [];
+  if (result.pageState !== 'interrupted') {
+    result.executed.forEach((step, i) => out.push(`${i + 1}. ${renderActionLine(step)}`));
+  }
+  if (result.failedStep) {
+    out.push(
+      `Step ${result.failedStep.index + 1} FAILED (${result.failedStep.code}): ${result.failedStep.message} — remaining steps were not executed.`,
+    );
+  }
+  out.push(PAGE_STATE_LINES[result.pageState]);
+  if (result.snapshot) {
+    out.push('', 'Current page (fresh refs — ALL earlier refs are stale now):');
+    out.push(renderSnapshot(result.snapshot));
+  }
+  return out.join('\n');
+}
+
+/** Render tab_find matches as one snapshot-style line each. */
+export function renderFindResult(result: FindResult): string {
+  if (result.total === 0) {
+    return (
+      `No matches on "${result.title}" (${result.url}). Try a shorter/different query, ` +
+      'a different role, or a full tab_snapshot. Note: tab_find took a fresh snapshot — ' +
+      'earlier refs are now stale.'
+    );
+  }
+  const out = [`${result.total} match(es) on "${result.title}" (${result.url}):`];
+  for (const node of result.matches) {
+    renderNode(node, 0, out);
+  }
+  if (result.total > result.matches.length) {
+    out.push(`… ${result.total - result.matches.length} more — narrow the query.`);
+  }
+  out.push('Refs come from a FRESH snapshot taken by tab_find — all earlier refs are stale.');
+  return out.join('\n');
 }

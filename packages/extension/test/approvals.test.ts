@@ -8,9 +8,7 @@ import {
 
 const PROPOSAL = {
   opId: 'op-1',
-  tool: 'tab_click' as const,
-  ref: 'n7',
-  target: 'button "Save"',
+  steps: [{ kind: 'click' as const, target: 'button "Save"' }],
   origin: 'https://app.example.com',
 };
 
@@ -26,7 +24,7 @@ describe('approvals', () => {
   it('exposes the proposal while pending and resolves approved on user approval', async () => {
     const promise = proposeApproval(PROPOSAL);
     const pending = getPendingApproval();
-    expect(pending).toMatchObject({ opId: 'op-1', tool: 'tab_click', target: 'button "Save"' });
+    expect(pending).toMatchObject({ opId: 'op-1', steps: [{ kind: 'click', target: 'button "Save"' }] });
     expect(pending!.deadline).toBeGreaterThan(Date.now());
     expect(decideApproval('op-1', true)).toBe(true);
     await expect(promise).resolves.toBe('approved');
