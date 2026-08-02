@@ -16,11 +16,12 @@ if (!window.__ctrContentInjected) {
 
   chrome.runtime.onMessage.addListener(
     (msg: unknown, _sender, sendResponse: (response: unknown) => void) => {
-      const m = (msg ?? {}) as { type?: string; ref?: unknown };
+      const m = (msg ?? {}) as { type?: string; ref?: unknown; filter?: unknown };
 
       if (m.type === 'ctrSnapshot') {
         try {
-          const { result, refMap } = captureSnapshot(document);
+          const filter = m.filter === 'interactive' ? 'interactive' : 'full';
+          const { result, refMap } = captureSnapshot(document, filter);
           lastRefMap = refMap;
           sendResponse({ ok: true, result });
         } catch (e) {

@@ -88,7 +88,7 @@ describe('router', () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.result).toEqual(snapshot);
-    expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrSnapshot' });
+    expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrSnapshot', filter: 'full' });
 
     const audit = await getAudit();
     expect(audit[0]).toMatchObject({
@@ -97,6 +97,30 @@ describe('router', () => {
       grantId: grant.grantId,
       ok: true,
     });
+  });
+
+  it('resolves an omitted grantId to the single existing grant and audits it', async () => {
+    const grant = await mintGrant(1, ORIGIN);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+    mock.tabs.sendMessage.mockResolvedValue({ ok: true, result: { title: 'Dash' } });
+
+    const res = await handleToolCall(call('tab_snapshot'));
+    expect(res.ok).toBe(true);
+
+    const audit = await getAudit();
+    expect(audit[0]).toMatchObject({ type: 'tool_call', tool: 'tab_snapshot', grantId: grant.grantId, ok: true });
+  });
+
+  it('passes filter=interactive through to the content script; anything else becomes full', async () => {
+    const grant = await mintGrant(1, ORIGIN);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+    mock.tabs.sendMessage.mockResolvedValue({ ok: true, result: {} });
+
+    await handleToolCall(call('tab_snapshot', { grantId: grant.grantId, filter: 'interactive' }));
+    expect(mock.tabs.sendMessage).toHaveBeenLastCalledWith(1, { type: 'ctrSnapshot', filter: 'interactive' });
+
+    await handleToolCall(call('tab_snapshot', { grantId: grant.grantId, filter: 'bogus' }));
+    expect(mock.tabs.sendMessage).toHaveBeenLastCalledWith(1, { type: 'ctrSnapshot', filter: 'full' });
   });
 
   it('happy path: forwards tab_read with the ref', async () => {

@@ -2,8 +2,13 @@
 // Included: landmarks, headings, links, buttons, inputs, images-with-alt and
 // visible text runs (trimmed, merged). Hidden elements and password values are
 // never exposed. Pure DOM functions — unit-tested under jsdom.
-import type { SnapshotNode, SnapshotResult } from '@ctr/shared';
-import { READ_TEXT_MAX_CHARS, SNAPSHOT_MAX_NODES, SNAPSHOT_NAME_MAX_CHARS } from '@ctr/shared';
+import type { SnapshotFilter, SnapshotNode, SnapshotResult } from '@ctr/shared';
+import {
+  READ_TEXT_MAX_CHARS,
+  SNAPSHOT_HREF_MAX_CHARS,
+  SNAPSHOT_MAX_NODES,
+  SNAPSHOT_NAME_MAX_CHARS,
+} from '@ctr/shared';
 
 export interface SnapshotCapture {
   result: SnapshotResult;
@@ -38,12 +43,38 @@ const LEAF_ROLES = new Set([
   'img',
 ]);
 
+/**
+ * Roles kept by filter 'interactive': everything an agent could target with a
+ * future action, plus headings for orientation. Covers explicit ARIA widget
+ * roles beyond what computeRole derives from tags.
+ */
+const INTERACTIVE_ROLES = new Set([
+  'heading',
+  'link',
+  'button',
+  'checkbox',
+  'radio',
+  'textbox',
+  'combobox',
+  'searchbox',
+  'listbox',
+  'option',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'slider',
+  'spinbutton',
+  'switch',
+  'tab',
+]);
+
 interface WalkCtx {
   counter: number;
   truncated: boolean;
   refMap: Map<string, Element>;
   doc: Document;
   win: Window;
+  filter: SnapshotFilter;
 }
 
 function collapse(text: string): string {
@@ -167,6 +198,14 @@ function computeValue(el: Element): string | undefined {
   return undefined;
 }
 
+/** Absolute http(s) href for link nodes; other schemes (javascript:, mailto:, …) are omitted. */
+function computeHref(el: Element): string | undefined {
+  const href = (el as HTMLAnchorElement).href;
+  if (typeof href !== 'string') return undefined;
+  if (!href.startsWith('http://') && !href.startsWith('https://')) return undefined;
+  return href.length > SNAPSHOT_HREF_MAX_CHARS ? href.slice(0, SNAPSHOT_HREF_MAX_CHARS) : href;
+}
+
 /** Allocate the next ref, or null when the node cap is reached (sets truncated). */
 function nextRef(ctx: WalkCtx, el: Element): string | null {
   if (ctx.counter >= SNAPSHOT_MAX_NODES) {
@@ -188,11 +227,20 @@ function walkElement(el: Element, ctx: WalkCtx): SnapshotNode[] {
   if (role === null) {
     return walkChildren(el, ctx);
   }
+  // Interactive filter: non-interactive structure (landmarks, lists, text
+  // containers) gets no node of its own — its children are spliced up.
+  if (ctx.filter === 'interactive' && !INTERACTIVE_ROLES.has(role)) {
+    return walkChildren(el, ctx);
+  }
   const ref = nextRef(ctx, el);
   if (ref === null) return [];
   const node: SnapshotNode = { ref, role, name: computeName(el, ctx.doc, role) };
   const value = computeValue(el);
   if (value !== undefined) node.value = value;
+  if (role === 'link') {
+    const href = computeHref(el);
+    if (href !== undefined) node.href = href;
+  }
   if (!LEAF_ROLES.has(role)) {
     const children = walkChildren(el, ctx);
     if (children.length > 0) node.children = children;
@@ -208,6 +256,7 @@ function walkChildren(el: Element, ctx: WalkCtx): SnapshotNode[] {
     const text = collapse(textBuf);
     textBuf = '';
     if (!text) return;
+    if (ctx.filter === 'interactive') return;
     // Text refs map to the parent element (tab_read returns its full text).
     const ref = nextRef(ctx, el);
     if (ref === null) return;
@@ -227,7 +276,7 @@ function walkChildren(el: Element, ctx: WalkCtx): SnapshotNode[] {
   return out;
 }
 
-export function captureSnapshot(doc: Document): SnapshotCapture {
+export function captureSnapshot(doc: Document, filter: SnapshotFilter = 'full'): SnapshotCapture {
   const win = doc.defaultView;
   if (!win || !doc.body) {
     throw new Error('Document has no window or body.');
@@ -238,6 +287,7 @@ export function captureSnapshot(doc: Document): SnapshotCapture {
     refMap: new Map(),
     doc,
     win,
+    filter,
   };
   const rootRef = nextRef(ctx, doc.body);
   const children = walkChildren(doc.body, ctx);
@@ -253,6 +303,7 @@ export function captureSnapshot(doc: Document): SnapshotCapture {
       title: doc.title,
       capturedAt: new Date().toISOString(),
       truncated: ctx.truncated,
+      filter,
       tree,
     },
     refMap: ctx.refMap,

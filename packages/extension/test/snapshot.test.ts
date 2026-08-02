@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SnapshotNode } from '@ctr/shared';
-import { READ_TEXT_MAX_CHARS, SNAPSHOT_MAX_NODES, SNAPSHOT_NAME_MAX_CHARS } from '@ctr/shared';
+import {
+  READ_TEXT_MAX_CHARS,
+  SNAPSHOT_HREF_MAX_CHARS,
+  SNAPSHOT_MAX_NODES,
+  SNAPSHOT_NAME_MAX_CHARS,
+} from '@ctr/shared';
 import { captureSnapshot, readRef } from '../src/content/snapshot.js';
 
 function flatten(node: SnapshotNode): SnapshotNode[] {
@@ -112,6 +117,55 @@ describe('captureSnapshot', () => {
     document.body.innerHTML = `<h1>${long}</h1>`;
     const { result } = captureSnapshot(document);
     expect(findByRole(result.tree, 'heading')[0]?.name).toHaveLength(SNAPSHOT_NAME_MAX_CHARS);
+  });
+
+  it('includes absolute http(s) hrefs on link nodes, omitting other schemes', () => {
+    document.body.innerHTML = `
+      <a href="/docs">Docs</a>
+      <a href="https://other.example.com/x">External</a>
+      <a href="javascript:void(0)">JS</a>
+      <a href="mailto:a@b.c">Mail</a>
+    `;
+    const { result } = captureSnapshot(document);
+    const links = findByRole(result.tree, 'link');
+    expect(links.find((l) => l.name === 'Docs')?.href).toMatch(/^http.*\/docs$/);
+    expect(links.find((l) => l.name === 'External')?.href).toBe('https://other.example.com/x');
+    expect(links.find((l) => l.name === 'JS')?.href).toBeUndefined();
+    expect(links.find((l) => l.name === 'Mail')?.href).toBeUndefined();
+  });
+
+  it('caps hrefs at SNAPSHOT_HREF_MAX_CHARS', () => {
+    document.body.innerHTML = `<a href="https://example.com/${'x'.repeat(500)}">Long</a>`;
+    const { result } = captureSnapshot(document);
+    expect(findByRole(result.tree, 'link')[0]?.href).toHaveLength(SNAPSHOT_HREF_MAX_CHARS);
+  });
+
+  it("filter 'interactive' keeps controls and headings, drops text runs and structure", () => {
+    document.body.innerHTML = `
+      <nav><ul><li><a href="/home">Home</a></li></ul></nav>
+      <h2>Section</h2>
+      <p>Some long text content</p>
+      <div role="tab">Tab A</div>
+      <button>Save</button>
+      <input type="text" aria-label="Name" />
+    `;
+    const { result, refMap } = captureSnapshot(document, 'interactive');
+    expect(result.filter).toBe('interactive');
+    const roles = flatten(result.tree).map((n) => n.role);
+    expect(roles).toEqual(['document', 'link', 'heading', 'tab', 'button', 'textbox']);
+    // Structure was spliced: the link is a direct child of the document root.
+    expect(result.tree.children?.[0]?.role).toBe('link');
+    // Every emitted ref stays readable via tab_read.
+    for (const node of flatten(result.tree)) {
+      expect(readRef(refMap, node.ref).ok, node.ref).toBe(true);
+    }
+  });
+
+  it("filter defaults to 'full' and records it in the result", () => {
+    document.body.innerHTML = '<p>text</p>';
+    const { result } = captureSnapshot(document);
+    expect(result.filter).toBe('full');
+    expect(findByRole(result.tree, 'text')).toHaveLength(1);
   });
 
   it('assigns sequential refs unique within the snapshot', () => {

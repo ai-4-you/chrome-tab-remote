@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { ToolName } from '@ctr/shared';
+import type { SnapshotFilter, ToolName } from '@ctr/shared';
+import { ERROR_RECOVERY, renderSnapshot, SNAPSHOT_FILTERS, SnapshotResultSchema } from '@ctr/shared';
 import { ToolCallError } from './bridge.js';
 
 export const DEFAULT_MCP_PORT = 8917;
@@ -35,12 +36,22 @@ function okResult(data: unknown): CallToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
+function textResult(text: string): CallToolResult {
+  return { content: [{ type: 'text', text }] };
+}
+
+/** Protocol errors carry a recovery instruction so the agent knows the concrete next step. */
 function errorResult(error: unknown): CallToolResult {
   const text =
     error instanceof ToolCallError
-      ? `${error.code}: ${error.message}`
+      ? `${error.code}: ${error.message}\nNext step: ${ERROR_RECOVERY[error.code]}`
       : `error: ${error instanceof Error ? error.message : String(error)}`;
   return { isError: true, content: [{ type: 'text', text }] };
+}
+
+/** Params for the extension router; an omitted grantId resolves to the single active grant there. */
+function grantParams(grantId: string | undefined, rest: Record<string, unknown> = {}): Record<string, unknown> {
+  return grantId === undefined ? rest : { grantId, ...rest };
 }
 
 /** Tool handler functions, separated from MCP wiring so they are unit-testable with a stub bridge. */
@@ -57,16 +68,26 @@ export function createToolHandlers(bridge: ToolBridge) {
         return errorResult(error);
       }
     },
-    tabSnapshot: async ({ grantId }: { grantId: string }): Promise<CallToolResult> => {
+    tabSnapshot: async ({
+      grantId,
+      filter,
+    }: {
+      grantId?: string;
+      filter?: SnapshotFilter;
+    }): Promise<CallToolResult> => {
       try {
-        return okResult(await bridge.callTool('tab_snapshot', { grantId }));
+        const raw = await bridge.callTool('tab_snapshot', grantParams(grantId, filter ? { filter } : {}));
+        // Compact indented-text rendering (about half the tokens of the JSON
+        // tree); fall back to JSON if the extension sent an unexpected shape.
+        const parsed = SnapshotResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderSnapshot(parsed.data)) : okResult(raw);
       } catch (error) {
         return errorResult(error);
       }
     },
-    tabRead: async ({ grantId, ref }: { grantId: string; ref: string }): Promise<CallToolResult> => {
+    tabRead: async ({ grantId, ref }: { grantId?: string; ref: string }): Promise<CallToolResult> => {
       try {
-        return okResult(await bridge.callTool('tab_read', { grantId, ref }));
+        return okResult(await bridge.callTool('tab_read', grantParams(grantId, { ref })));
       } catch (error) {
         return errorResult(error);
       }
@@ -77,7 +98,11 @@ export function createToolHandlers(bridge: ToolBridge) {
 const GRANT_ID_INPUT = z
   .string()
   .uuid()
-  .describe('The grantId of an active Tab Grant, obtained via list_grants.');
+  .optional()
+  .describe(
+    'Optional. There is at most ONE grant at a time; omit this to target it. ' +
+      'Pass an explicit grantId (from list_grants) only to assert you mean that specific grant.',
+  );
 
 /** Build one McpServer instance exposing the observe-only Stage 1 tools. */
 export function createMcpServer(bridge: ToolBridge): McpServer {
@@ -88,11 +113,13 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     'list_grants',
     {
       description:
-        'List the Tab Grants the user has currently issued in the Chrome side panel. ' +
-        'chrome-tab-remote is observe-only and strictly consent-based: a grant authorizes ' +
-        'read access to exactly one tab, is pinned to that tab’s origin, expires ' +
-        'automatically, and can be revoked by the user at any time. Without an active ' +
-        'grant no tab can be observed.',
+        'List the Tab Grants the user has currently issued in the Chrome side panel (at most ' +
+        'one). chrome-tab-remote is observe-only and strictly consent-based: a grant ' +
+        'authorizes read access to exactly one tab, is pinned to that tab’s website, expires ' +
+        'after 30 minutes, and the user can revoke it at any time. Without an active grant ' +
+        'no tab can be observed — errors tell you what to ask the user to do. You do NOT ' +
+        'need to call this before tab_snapshot/tab_read: those default to the single active ' +
+        'grant. Call it to see which site is shared and when the grant expires (expiresAt).',
     },
     handlers.listGrants,
   );
@@ -101,12 +128,24 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     'tab_snapshot',
     {
       description:
-        'Capture an accessibility-tree-like snapshot (roles, names, values, node refs) of ' +
-        'the single tab the user granted observe access to. Requires a valid grantId from ' +
-        'list_grants; fails if the grant is missing, expired, suspended (tab navigated to ' +
-        'another origin), or revoked. Observe-only: this never modifies the page, and ' +
-        'password values are always redacted.',
-      inputSchema: { grantId: GRANT_ID_INPUT },
+        'Capture the granted tab as compact indented text: one line per node with a ref ' +
+        '("n0", "n1", …), role, accessible name, form value, and link URL. Start here — ' +
+        'call this before tab_read, since refs come from the snapshot. Refs stay valid ' +
+        'only until the next tab_snapshot or page navigation; after acting on stale refs, ' +
+        'snapshot again. Use filter "interactive" first on large pages (controls and ' +
+        'headings only, far fewer tokens), then "full" (default) when you need the text ' +
+        'content. Observe-only: never modifies the page; password values always read ' +
+        '[redacted]. Long names are truncated at 120 chars — tab_read returns full text.',
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        filter: z
+          .enum(SNAPSHOT_FILTERS)
+          .optional()
+          .describe(
+            '"interactive": only links, buttons, form controls, menu/tab widgets and ' +
+              'headings — no text content. "full" (default): everything, including text runs.',
+          ),
+      },
     },
     handlers.tabSnapshot,
   );
@@ -115,10 +154,11 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     'tab_read',
     {
       description:
-        'Read the full text content of one element from the granted tab, addressed by a ' +
-        'node ref (e.g. "n42") from the most recent tab_snapshot of that tab. Requires a ' +
-        'valid grantId; observe-only and subject to the same grant checks and password ' +
-        'redaction as tab_snapshot.',
+        'Read the FULL text content of one element from the granted tab, addressed by a ' +
+        'node ref (e.g. "n42") from the most recent tab_snapshot. Use it when a snapshot ' +
+        'name was truncated or when filter "interactive" hid the text you need. Refs from ' +
+        'older snapshots fail with unknown_ref — take a fresh snapshot then. Same consent ' +
+        'boundary as tab_snapshot: observe-only, passwords read [redacted].',
       inputSchema: {
         grantId: GRANT_ID_INPUT,
         ref: z

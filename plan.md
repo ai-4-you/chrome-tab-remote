@@ -70,6 +70,10 @@ The agent never sees raw DOM or screenshots. The content script produces a struc
 - Standards-based: ARIA is a W3C standard; the a11y tree is how assistive tech already reads pages.
 - A natural **redaction point**: policy can strip password fields, mask configured patterns, cap size — before anything leaves the browser.
 
+**Agent ergonomics (implemented 2026-08-02):** `tab_snapshot` supports `filter: 'interactive' | 'full'` (interactive = controls + headings only, far fewer tokens); link nodes carry absolute http(s) `href`s (capped); the MCP result is rendered as compact indented text (`- n4 link "Contact" https://…`) instead of a JSON tree; `grantId` is optional on all tools (defaults to the single grant — max 1 by design); protocol errors append a per-code recovery instruction ("Next step: ask the user to re-confirm …"); tool descriptions teach the workflow (snapshot first, ref validity, redaction).
+
+**Later candidates (ranked, not yet built):** `tab_find(query, role?)` returning matching refs; snapshot ids + `stale_ref` errors instead of silently serving old refs; subtree scoping (`tab_snapshot(scope: ref)`); `wait_for` and snapshot diffs once actions exist.
+
 ### 2.3 Action vocabulary — small, deterministic, BiDi-aligned
 
 Actions target **node refs from the latest snapshot**, not free-form CSS selectors invented by an LLM:
@@ -152,7 +156,7 @@ Stage 1 is intentionally shippable and *useful on its own* ("let my agent read t
 ## 7. Open decisions (before Stage 1 implementation)
 
 1. **Native host runtime** — proposed resolution in §5: Node/TS with official MCP SDK now, single-binary packaging (Node SEA / bun compile) before wider distribution. Confirm or override.
-2. **Snapshot fidelity** — pure a11y tree vs a11y tree enriched with limited DOM data (links' hrefs, input values). Leaning: enriched, behind the redaction policy.
+2. **Snapshot fidelity** — ~~pure a11y tree vs enriched~~ **resolved 2026-08-02: enriched** — input values (passwords redacted) and link hrefs (http/https only, capped) ship in the snapshot.
 3. **Reuse audit** — read nanobrowser's DOM-extraction/guardrail code and playwright-mcp's snapshot format for concrete borrowing (formats, not frameworks) before writing Stage 1 code.
 
 ## 8. Verification approach

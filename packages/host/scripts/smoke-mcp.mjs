@@ -30,20 +30,17 @@ if (!active) {
   process.exit(0);
 }
 
-const snap = await client.callTool({ name: 'tab_snapshot', arguments: { grantId: active.grantId } });
+// grantId is deliberately omitted: the extension defaults to the single active grant.
+const snap = await client.callTool({ name: 'tab_snapshot', arguments: {} });
 const snapText = snap.content?.[0]?.text ?? '';
 console.log('TAB_SNAPSHOT:', snap.isError ? `ERROR ${snapText.slice(0, 300)}` : 'ok');
 if (!snap.isError) {
-  const parsed = JSON.parse(snapText);
-  console.log('  url:', parsed.url, '| title:', parsed.title, '| truncated:', parsed.truncated);
-  const firstRef = (function find(n) {
-    return n?.ref ?? (n?.children ?? []).map(find).find(Boolean);
-  })(parsed.tree);
+  // Compact text format: "url:"/"title:" header lines, then "- n<i> role ..." lines.
+  const header = (name) => snapText.match(new RegExp(`^${name}: (.*)$`, 'm'))?.[1];
+  console.log('  url:', header('url'), '| title:', header('title'), '| truncated:', header('truncated') ?? 'false');
+  const firstRef = snapText.match(/^\s*- (n\d+) /m)?.[1];
   if (firstRef) {
-    const read = await client.callTool({
-      name: 'tab_read',
-      arguments: { grantId: active.grantId, ref: firstRef },
-    });
+    const read = await client.callTool({ name: 'tab_read', arguments: { ref: firstRef } });
     console.log('TAB_READ:', read.isError ? 'ERROR' : 'ok', (read.content?.[0]?.text ?? '').slice(0, 200));
   }
 }

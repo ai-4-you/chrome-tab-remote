@@ -34,37 +34,52 @@ async function sendToContentScript(tabId: number, message: unknown): Promise<unk
   }
 }
 
-/** Handle one toolCall: route, then audit the outcome. */
+/** Handle one toolCall: route, then audit the outcome (with the resolved grantId). */
 export async function handleToolCall(req: ToolCallRequest): Promise<ToolResult> {
-  const res = await routeToolCall(req);
-  const grantId = typeof req.params['grantId'] === 'string' ? (req.params['grantId'] as string) : undefined;
+  const routed = await routeToolCall(req);
   await appendAudit({
     type: 'tool_call',
     tool: req.tool,
-    grantId,
-    ok: res.ok,
-    detail: res.ok ? undefined : res.error.code,
+    grantId: routed.grantId,
+    ok: routed.res.ok,
+    detail: routed.res.ok ? undefined : routed.res.error.code,
   });
-  return res;
+  return routed.res;
 }
 
-async function routeToolCall(req: ToolCallRequest): Promise<ToolResult> {
+interface RoutedResult {
+  res: ToolResult;
+  /** The grant the call was resolved against (also when defaulted), for the audit trail. */
+  grantId?: string;
+}
+
+async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   if (req.tool === 'list_grants') {
-    return okResult(req.id, { grants: await listGrants() });
+    return { res: okResult(req.id, { grants: await listGrants() }) };
   }
 
-  const grantId = req.params['grantId'];
-  if (typeof grantId !== 'string' || grantId.length === 0) {
-    return errResult(req.id, 'no_grant', 'Missing grantId parameter.');
+  // grantId is optional: with at most one grant by design, an omitted grantId
+  // resolves to the single existing grant.
+  const grantIdParam = req.params['grantId'];
+  let grant;
+  if (typeof grantIdParam === 'string' && grantIdParam.length > 0) {
+    grant = await getGrant(grantIdParam);
+    if (!grant) {
+      return { res: errResult(req.id, 'no_grant', `No grant with id ${grantIdParam}.`) };
+    }
+  } else {
+    const grants = await listGrants();
+    grant = grants[0];
+    if (!grant) {
+      return { res: errResult(req.id, 'no_grant', 'No active grant.') };
+    }
   }
-  const grant = await getGrant(grantId);
-  if (!grant) {
-    return errResult(req.id, 'no_grant', `No grant with id ${grantId}.`);
-  }
+
+  const grantId = grant.grantId;
 
   const usable = isGrantUsable(grant);
   if (!usable.ok) {
-    return errResult(req.id, usable.code, `Grant is not usable (${usable.code}).`);
+    return { res: errResult(req.id, usable.code, `Grant is not usable (${usable.code}).`), grantId };
   }
 
   // Tab must still exist.
@@ -72,10 +87,10 @@ async function routeToolCall(req: ToolCallRequest): Promise<ToolResult> {
   try {
     tab = await chrome.tabs.get(grant.tabId);
   } catch {
-    await revokeGrant(grant.grantId);
+    await revokeGrant(grantId);
     await dropOriginPermission(grant.origin);
-    await appendAudit({ type: 'grant_revoked', grantId: grant.grantId, detail: 'granted tab no longer exists' });
-    return errResult(req.id, 'grant_revoked', 'The granted tab no longer exists; grant revoked.');
+    await appendAudit({ type: 'grant_revoked', grantId, detail: 'granted tab no longer exists' });
+    return { res: errResult(req.id, 'grant_revoked', 'The granted tab no longer exists; grant revoked.'), grantId };
   }
 
   // Origin pin — defense in depth in case a navigation slipped past tabs.onUpdated.
@@ -86,19 +101,20 @@ async function routeToolCall(req: ToolCallRequest): Promise<ToolResult> {
     sameOrigin = false;
   }
   if (!sameOrigin) {
-    await suspendGrant(grant.grantId);
-    await appendAudit({ type: 'grant_suspended', grantId: grant.grantId, detail: 'origin mismatch at tool call' });
-    return errResult(req.id, 'grant_suspended', 'Tab origin no longer matches the grant; grant suspended.');
+    await suspendGrant(grantId);
+    await appendAudit({ type: 'grant_suspended', grantId, detail: 'origin mismatch at tool call' });
+    return { res: errResult(req.id, 'grant_suspended', 'Tab origin no longer matches the grant; grant suspended.'), grantId };
   }
 
   // Build the content-script message.
-  let message: { type: string; ref?: string };
+  let message: { type: string; ref?: string; filter?: string };
   if (req.tool === 'tab_snapshot') {
-    message = { type: 'ctrSnapshot' };
+    const filter = req.params['filter'] === 'interactive' ? 'interactive' : 'full';
+    message = { type: 'ctrSnapshot', filter };
   } else {
     const ref = req.params['ref'];
     if (typeof ref !== 'string' || ref.length === 0) {
-      return errResult(req.id, 'unknown_ref', 'Missing ref parameter.');
+      return { res: errResult(req.id, 'unknown_ref', 'Missing ref parameter.'), grantId };
     }
     message = { type: 'ctrRead', ref };
   }
@@ -107,14 +123,14 @@ async function routeToolCall(req: ToolCallRequest): Promise<ToolResult> {
   try {
     resp = await sendToContentScript(grant.tabId, message);
   } catch {
-    return errResult(req.id, 'tab_unreachable', 'Content script did not respond.');
+    return { res: errResult(req.id, 'tab_unreachable', 'Content script did not respond.'), grantId };
   }
 
   if (resp && typeof resp === 'object' && 'ok' in resp) {
     const r = resp as { ok: boolean; result?: unknown; error?: unknown };
-    if (r.ok) return okResult(req.id, r.result);
+    if (r.ok) return { res: okResult(req.id, r.result), grantId };
     const parsed = ToolErrorSchema.safeParse(r.error);
-    if (parsed.success) return errResult(req.id, parsed.data.code, parsed.data.message);
+    if (parsed.success) return { res: errResult(req.id, parsed.data.code, parsed.data.message), grantId };
   }
-  return errResult(req.id, 'tab_unreachable', 'Malformed response from content script.');
+  return { res: errResult(req.id, 'tab_unreachable', 'Malformed response from content script.'), grantId };
 }
