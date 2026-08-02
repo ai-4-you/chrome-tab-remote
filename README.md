@@ -15,7 +15,7 @@ The goal is an extension so small, so boring, and so reviewable that a security-
 - **You grant, it observes.** One click in the side panel grants read access to the current tab for 30 minutes. Chrome itself asks for your confirmation for that one website — never "all sites".
 - **The grant is pinned.** If the tab navigates to a different website, access is automatically suspended until you explicitly re-confirm — the panel shows you exactly which site you'd be re-approving.
 - **Revocation is instant.** One click, or just close the tab. Expiry is automatic.
-- **Observe-only.** This version cannot click, type, or change anything. Passwords are always redacted from what the agent sees.
+- **Observe by default; acting needs double consent.** A normal grant is read-only. Only if you tick **"allow actions"** when granting may the agent click, fill, or select — and even then **every single action pauses in the side panel** ("Agent wants to click *button 'Save'*", with the exact text it would type) until you approve it. Denials and timeouts fail closed. Passwords are always redacted from what the agent sees and can never be filled by it.
 - **Everything is audited.** Every grant, every read, every revocation — visible live in the side panel and appended to a local log file (`~/.chrome-tab-remote/audit.jsonl`).
 - **No agent included, on purpose.** The tab is exposed through [MCP](https://modelcontextprotocol.io), the open standard for agent↔tool connections. Any MCP-capable agent (Claude Code, custom tooling, a plain CLI) can be the "brain" — this project only guards the door.
 
@@ -79,31 +79,53 @@ claude mcp add --transport http tab-remote http://127.0.0.1:8917/mcp
 # then, in a Claude Code session: "Using the tab-remote tools, summarize my granted tab."
 ```
 
-### 4. Verify the trust boundary (the important part)
+### 4. Let the agent act (with your approval)
+
+Re-grant the tab with **"allow actions"** ticked, then:
+
+```bash
+npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot filter:interactive --allow-http
+npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_click ref:<a-button-ref> --allow-http --timeout 130000
+```
+
+(`--timeout 130000`: mcporter's 60 s default is shorter than the ~2 min approval window.) Keep the side panel visible — that's where the approval card appears.
+
+The call pauses; the side panel shows **"Agent wants to click …"** with Approve/Deny buttons and an auto-deny countdown. Approve it and the click executes; deny it and the agent gets `approval_denied` (and is told not to retry). `tab_fill` shows you the exact text before you approve; `tab_select` the chosen option.
+
+**⚡ Freaky mode** (on the grant card, act grants only): flip it and actions run *without* the per-action pause — flip it back any time, even mid-session. It's off by default, dies with the grant (every new grant starts strict), and every auto-approved action is still audited.
+
+### 5. Verify the trust boundary (the important part)
 
 | Do this | Expect this |
 |---|---|
+| Switch to a tab you did not grant | Panel says **"This tab is NOT shared"**; the grant appears under "Granted on another tab"; agent activity list for this tab is empty |
 | Navigate the granted tab to another website | Grant flips to **suspended**; tool calls fail with `grant_suspended` |
 | Click **Re-confirm for <site>** | Panel shows the exact new site before you approve; access resumes |
 | Click **Revoke** (or close the tab) | Tool calls fail with `no_grant`; Chrome's site permission is dropped again |
 | Wait out the 30 minutes | Tool calls fail with `grant_expired` |
 | Snapshot a page with a password field | The password value reads `[redacted]` |
-| Check `~/.chrome-tab-remote/audit.jsonl` | One line per grant event and per tool call, with timestamps |
+| Call `tab_click` on an observe-only grant | Fails with `observe_only` — the page is never touched |
+| **Deny** an action in the approval card | Agent gets `approval_denied`; the page is untouched |
+| Toggle **Freaky mode** off mid-session | The very next action pauses for approval again |
+| Revoke and re-grant with Freaky mode previously on | The new grant starts strict (per-action approval) |
+| Ignore the approval card | Auto-deny after ~2 minutes (`approval_timeout`) |
+| Ask the agent to fill a password field | Refused (`invalid_target`) — even on an act grant, even approved |
+| Check `~/.chrome-tab-remote/audit.jsonl` | One line per grant event, tool call, proposal, and decision |
 
 If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe-only) — implemented, unit-tested (158 tests) and verified end-to-end against a real tab on 2026-08-02. Honest gaps, tracked in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md):
+Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 198 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
 
-- The local MCP endpoint has **no authentication yet** — other processes on *your own machine* could read the granted tab while a grant is active. Localhost-only + DNS-rebinding protection are in place; token auth is the first item of the next stage.
+- The local MCP endpoint has **no authentication** — other processes on *your own machine* could reach it while a grant is active (though actions still require your approval click). Deliberate decision for the fully-local deployment; localhost-only + DNS-rebinding protection are in place.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
-- Acting on pages (click/type, always behind an explicit approval step) is designed but intentionally **not built yet** — see the trust ladder in [plan.md](./plan.md).
+- `scroll` and `navigate` actions are deliberately deferred; approval is strictly per-action (no batch mode yet) — see the trust ladder in [plan.md](./plan.md).
 
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 158 tests + dependency audit
+./precommit.sh   # typecheck + lint + 198 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

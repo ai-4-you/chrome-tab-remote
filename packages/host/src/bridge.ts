@@ -65,14 +65,19 @@ export class Bridge {
     return this.pending.size;
   }
 
-  /** Send one toolCall to the extension; resolves on matching toolResult, rejects on timeout. */
-  callTool(tool: ToolName, params: Record<string, unknown>): Promise<unknown> {
+  /**
+   * Send one toolCall to the extension; resolves on matching toolResult,
+   * rejects on timeout. Act tools pass a longer per-call timeout so the
+   * user-approval wait fits inside it.
+   */
+  callTool(tool: ToolName, params: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
     const id = randomUUID();
+    const effectiveTimeout = timeoutMs ?? this.timeoutMs;
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new ToolCallError('timeout', `toolCall '${tool}' (${id}) timed out after ${this.timeoutMs} ms`));
-      }, this.timeoutMs);
+        reject(new ToolCallError('timeout', `toolCall '${tool}' (${id}) timed out after ${effectiveTimeout} ms`));
+      }, effectiveTimeout);
       timer.unref?.();
       this.pending.set(id, { resolve, reject, timer });
       try {

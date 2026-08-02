@@ -151,7 +151,7 @@ One language — **TypeScript** — across both deliverables; there is no classi
 | Stage | Deliverable | Trust level |
 |---|---|---|
 | **1. Observe-only MVP** | Extension: tab selection → grant → side panel → `snapshot`/`read` via MCP bridge. No actions. | Read-only, one tab, local-only |
-| **2. Actions + approval** | `click`/`fill`/`select`/`scroll` with lifecycle + approval gate + audit log | Mutating, every action user-approved |
+| **2. Actions + approval** ✅ implemented 2026-08-02 | `click`/`fill`/`select` with approval gate + audit (requirements: `REQUIREMENTS.md` §7; `scroll`/`navigate` deferred; MCP token auth deprioritized per user decision 2026-08-02 — fully local deployment) | Mutating, every action user-approved |
 | **3. Sessions & ergonomics** | Persistent per-origin grants (runtime permission), batch plan approval, strict/relaxed modes | User-tunable |
 | **4. Enterprise** | Policy surface (`ExtensionSettings`, managed storage for org allow/deny lists), packaging, remote-backend variant (outbound WSS), third-party audit | Org-controlled |
 

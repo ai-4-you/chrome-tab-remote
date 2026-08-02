@@ -1,7 +1,7 @@
 // Grant store — the single source of truth for Tab Grants.
 // Persisted in chrome.storage.session: grants die with the browser session by design.
 // Stage 1: the model is list-shaped (future-proof) but at most ONE grant may exist.
-import type { Grant } from '@ctr/shared';
+import type { Grant, GrantMode } from '@ctr/shared';
 import { DEFAULT_GRANT_TTL_MS } from '@ctr/shared';
 
 const STORAGE_KEY = 'ctrGrants';
@@ -25,19 +25,21 @@ export async function getGrant(grantId: string): Promise<Grant | undefined> {
 }
 
 /**
- * Mint a new observe grant for one tab. Enforces the Stage 1 one-grant rule:
- * any pre-existing grant is replaced.
+ * Mint a new grant for one tab ('observe' by default; 'act' additionally
+ * allows user-approved actions). Enforces the one-grant rule: any pre-existing
+ * grant is replaced.
  */
 export async function mintGrant(
   tabId: number,
   origin: string,
   now: number = Date.now(),
+  mode: GrantMode = 'observe',
 ): Promise<Grant> {
   const grant: Grant = {
     grantId: crypto.randomUUID(),
     tabId,
     origin,
-    mode: 'observe',
+    mode,
     status: 'active',
     expiresAt: new Date(now + DEFAULT_GRANT_TTL_MS).toISOString(),
     createdByGesture: true,
@@ -67,7 +69,7 @@ export async function revokeGrantsForTab(tabId: number): Promise<Grant[]> {
 
 async function updateGrant(
   grantId: string,
-  patch: Partial<Pick<Grant, 'status' | 'origin'>>,
+  patch: Partial<Pick<Grant, 'status' | 'origin' | 'autoApprove'>>,
 ): Promise<Grant | undefined> {
   const grants = await readGrants();
   const existing = grants.find((g) => g.grantId === grantId);
@@ -75,6 +77,20 @@ async function updateGrant(
   const updated: Grant = { ...existing, ...patch };
   await writeGrants(grants.map((g) => (g.grantId === grantId ? updated : g)));
   return updated;
+}
+
+/**
+ * Toggle auto-approve ("YOLO") on an act grant. Refused for observe grants —
+ * there is nothing to auto-approve and the flag must never pre-exist a mode
+ * upgrade. Returns the updated grant, or undefined if unknown/refused.
+ */
+export async function setAutoApprove(
+  grantId: string,
+  enabled: boolean,
+): Promise<Grant | undefined> {
+  const grant = await getGrant(grantId);
+  if (!grant || grant.mode !== 'act') return undefined;
+  return updateGrant(grantId, { autoApprove: enabled });
 }
 
 /** Origin-pin violation: keep the grant but make it unusable until re-confirmed. */

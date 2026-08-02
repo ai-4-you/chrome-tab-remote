@@ -161,6 +161,43 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toContain('timeout:');
   });
 
+  it('action tools render prose with the stale-refs hint and pass the long approval timeout', async () => {
+    const callTool = vi.fn(async () => ({ action: 'click', ref: 'n7', target: 'button "Save"' }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabAction('tab_click', { ref: 'n7' });
+    expect(callTool).toHaveBeenCalledWith('tab_click', { ref: 'n7' }, 120_000);
+    expect(textOf(result)).toBe(
+      'Clicked button "Save" (n7). The page may have changed — take a new tab_snapshot before further actions.',
+    );
+  });
+
+  it('action tools forward text/value and an explicit grantId', async () => {
+    const callTool = vi.fn(async () => ({
+      action: 'fill',
+      ref: 'n5',
+      target: 'textbox "Search"',
+      text: 'apples',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    await handlers.tabAction('tab_fill', { grantId: GRANT.grantId, ref: 'n5', text: 'apples' });
+    expect(callTool).toHaveBeenCalledWith(
+      'tab_fill',
+      { grantId: GRANT.grantId, ref: 'n5', text: 'apples' },
+      120_000,
+    );
+  });
+
+  it('action denials carry the recovery instruction', async () => {
+    const callTool = vi.fn(async () => {
+      throw new ToolCallError('approval_denied', 'The user declined: tab_click on button "Save".');
+    });
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabAction('tab_click', { ref: 'n7' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('approval_denied:');
+    expect(textOf(result)).toContain('Do not retry the same action');
+  });
+
   it('maps unexpected errors without inventing a protocol code', async () => {
     const callTool = vi.fn(async () => {
       throw new Error('kaboom');

@@ -7,7 +7,7 @@ import {
   SNAPSHOT_MAX_NODES,
   SNAPSHOT_NAME_MAX_CHARS,
 } from '@ctr/shared';
-import { captureSnapshot, readRef } from '../src/content/snapshot.js';
+import { captureSnapshot, describeElement, readRef } from '../src/content/snapshot.js';
 
 function flatten(node: SnapshotNode): SnapshotNode[] {
   return [node, ...(node.children ?? []).flatMap(flatten)];
@@ -202,6 +202,54 @@ describe('captureSnapshot', () => {
     const refs = flatten(result.tree).map((n) => n.ref);
     expect(new Set(refs).size).toBe(refs.length);
     for (const ref of refs) expect(ref).toMatch(/^n\d+$/);
+  });
+
+  it('refs are monotonic across snapshots (startAt) so stale refs are detectable', () => {
+    document.body.innerHTML = '<button>Save</button>';
+    const first = captureSnapshot(document);
+    expect(first.result.tree.ref).toBe('n0');
+    const second = captureSnapshot(document, 'full', first.nextStart);
+    // No overlap: every ref of snapshot 2 starts where snapshot 1 ended.
+    expect(second.result.tree.ref).toBe(`n${first.nextStart}`);
+    const refs1 = flatten(first.result.tree).map((n) => n.ref);
+    const refs2 = flatten(second.result.tree).map((n) => n.ref);
+    expect(refs1.filter((r) => refs2.includes(r))).toEqual([]);
+
+    // A ref from snapshot 1 against snapshot 2's map: stale_ref, not unknown_ref.
+    const stale = readRef(second.refMap, refs1[1]!, first.nextStart);
+    expect(stale.ok).toBe(false);
+    if (stale.ok) return;
+    expect(stale.code).toBe('stale_ref');
+    // A never-issued ref stays unknown_ref.
+    const unknown = readRef(second.refMap, 'n99999', first.nextStart);
+    expect(unknown.ok).toBe(false);
+    if (unknown.ok) return;
+    expect(unknown.code).toBe('unknown_ref');
+  });
+
+  it('lists <select> options on combobox nodes (C-6), capped with …', () => {
+    document.body.innerHTML = `
+      <select aria-label="Color">
+        <option value="r">Red</option>
+        <option value="Green">Green</option>
+      </select>`;
+    const { result } = captureSnapshot(document);
+    expect(findByRole(result.tree, 'combobox')[0]?.options).toEqual(['Red (r)', 'Green']);
+
+    const many = Array.from({ length: 25 })
+      .map((_, i) => `<option value="v${i}">Option ${i}</option>`)
+      .join('');
+    document.body.innerHTML = `<select aria-label="Many">${many}</select>`;
+    const capped = captureSnapshot(document);
+    const options = findByRole(capped.result.tree, 'combobox')[0]?.options;
+    expect(options).toHaveLength(21);
+    expect(options?.at(-1)).toBe('…');
+  });
+
+  it('describeElement names elements for approvals', () => {
+    document.body.innerHTML = '<button>Save</button><div>plain</div>';
+    expect(describeElement(document.querySelector('button')!)).toBe('button "Save"');
+    expect(describeElement(document.querySelector('div')!)).toBe('div');
   });
 });
 

@@ -15,15 +15,44 @@
     </header>
 
     <section class="card" id="tab-section">
-      <h2>Current tab</h2>
+      <h2>This tab</h2>
       <div id="current-tab-title" class="tab-title">—</div>
       <div id="current-tab-origin" class="muted">—</div>
+      <div id="tab-share-status" class="share-status"></div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="act-mode" />
+        Also allow actions — every single action still needs your approval here
+      </label>
       <button id="grant-btn" class="btn btn-primary">Grant observe access (30 min)</button>
       <div id="grant-error" class="error hidden"></div>
     </section>
 
+    <section class="card hidden" id="elsewhere-section">
+      <h2>Granted on another tab</h2>
+      <div id="elsewhere-title" class="tab-title"></div>
+      <div id="elsewhere-origin" class="muted mono"></div>
+      <div id="elsewhere-expiry" class="muted"></div>
+      <div id="elsewhere-freaky" class="freaky-warning hidden">⚡ Freaky mode is ON there — the agent acts without asking</div>
+      <div class="btn-row">
+        <button id="goto-granted-btn" class="btn">Go to tab</button>
+        <button id="elsewhere-revoke-btn" class="btn btn-danger">Revoke</button>
+      </div>
+    </section>
+
+    <section class="card hidden" id="approval-section">
+      <h2>⚠ Action approval</h2>
+      <div id="approval-text" class="approval-text"></div>
+      <div id="approval-detail" class="mono"></div>
+      <div id="approval-countdown" class="muted"></div>
+      <div class="btn-row">
+        <button id="approve-btn" class="btn btn-primary">Approve</button>
+        <button id="deny-btn" class="btn btn-danger">Deny</button>
+        <button id="approval-goto-btn" class="btn">Go to tab</button>
+      </div>
+    </section>
+
     <section class="card hidden" id="grant-section">
-      <h2>Active grant</h2>
+      <h2>Active grant — this tab</h2>
       <div class="grant-row">
         <span class="label">Origin</span>
         <span id="grant-origin" class="mono"></span>
@@ -36,6 +65,10 @@
         <span class="label">Expires</span>
         <span id="grant-expiry" class="mono"></span>
       </div>
+      <label class="checkbox-row freaky-row hidden" id="freaky-row">
+        <input type="checkbox" id="freaky-toggle" />
+        <span>⚡ <strong>Freaky mode</strong> — the agent acts WITHOUT asking (per-action approval off)</span>
+      </label>
       <div class="btn-row">
         <button id="reconfirm-btn" class="btn hidden">Re-confirm</button>
         <button id="revoke-btn" class="btn btn-danger">Revoke</button>
@@ -43,7 +76,12 @@
     </section>
 
     <section class="card" id="audit-section">
-      <h2>Audit trail</h2>
+      <h2>Agent activity — this tab</h2>
+      <label class="checkbox-row">
+        <input type="checkbox" id="audit-all" />
+        Show all activity (every tab + system events)
+      </label>
+      <div id="audit-empty" class="muted hidden">No agent activity on this tab.</div>
       <ul id="audit-list" class="audit-list"></ul>
     </section>
 

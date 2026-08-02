@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ERROR_CODES,
   ERROR_RECOVERY,
+  renderActionResult,
   renderGrants,
   renderSnapshot,
   type Grant,
@@ -106,6 +107,12 @@ describe('renderGrants', () => {
     expect(text).not.toContain('active');
   });
 
+  it('announces auto-approve so the agent knows the pause is off', () => {
+    const text = renderGrants([{ ...grant, mode: 'act', autoApprove: true }], NOW);
+    expect(text).toContain('auto-approve ON');
+    expect(renderGrants([grant], NOW)).not.toContain('auto-approve');
+  });
+
   it('appends the re-confirm instruction for suspended grants', () => {
     const text = renderGrants([{ ...grant, status: 'suspended' }], NOW);
     expect(text).toContain('suspended');
@@ -122,6 +129,20 @@ describe('renderGrants', () => {
     const text = renderGrants([], NOW);
     expect(text).toContain('No grants.');
     expect(text).toContain("click 'Grant observe access'");
+  });
+});
+
+describe('renderActionResult', () => {
+  it('renders each action verb with the target and the stale-refs hint', () => {
+    expect(renderActionResult({ action: 'click', ref: 'n7', target: 'button "Save"' })).toBe(
+      'Clicked button "Save" (n7). The page may have changed — take a new tab_snapshot before further actions.',
+    );
+    expect(
+      renderActionResult({ action: 'fill', ref: 'n5', target: 'textbox "Search"', text: 'apples' }),
+    ).toContain('Filled textbox "Search" with "apples" (n5).');
+    expect(
+      renderActionResult({ action: 'select', ref: 'n9', target: 'combobox "Color"', value: 'green' }),
+    ).toContain('Selected "green" in combobox "Color" (n9).');
   });
 });
 

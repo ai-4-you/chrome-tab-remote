@@ -12,6 +12,8 @@ export interface SnapshotNode {
   value?: string;
   /** Absolute http(s) URL for link nodes; capped at SNAPSHOT_HREF_MAX_CHARS. */
   href?: string;
+  /** combobox (<select>) only: choosable options as "label" or "label (value)"; capped. */
+  options?: string[];
   children?: SnapshotNode[];
 }
 
@@ -22,9 +24,13 @@ export const SnapshotNodeSchema: z.ZodType<SnapshotNode> = z.lazy(() =>
     name: z.string(),
     value: z.string().optional(),
     href: z.string().optional(),
+    options: z.array(z.string()).optional(),
     children: z.array(SnapshotNodeSchema).optional(),
   }),
 );
+
+/** Max <select> options listed per combobox node; more are cut with a trailing "…". */
+export const SNAPSHOT_MAX_OPTIONS = 20;
 
 /**
  * Snapshot filter: 'full' walks everything (text runs, structure, landmarks);

@@ -23,8 +23,15 @@ const grant: Grant = {
 };
 
 describe('TOOL_NAMES / ERROR_CODES', () => {
-  it('exposes exactly the Stage 1 tools', () => {
-    expect(TOOL_NAMES).toEqual(['tab_snapshot', 'tab_read', 'list_grants']);
+  it('exposes exactly the Stage 1 + Stage 2 tools', () => {
+    expect(TOOL_NAMES).toEqual([
+      'tab_snapshot',
+      'tab_read',
+      'list_grants',
+      'tab_click',
+      'tab_fill',
+      'tab_select',
+    ]);
   });
 
   it('exposes the agreed error codes', () => {
@@ -34,6 +41,11 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'grant_suspended',
       'grant_revoked',
       'unknown_ref',
+      'stale_ref',
+      'invalid_target',
+      'observe_only',
+      'approval_denied',
+      'approval_timeout',
       'tab_unreachable',
       'timeout',
     ]);
@@ -61,7 +73,7 @@ describe('ToolCallRequestSchema', () => {
   });
 
   it('rejects an unknown tool', () => {
-    const msg = { id: 'req-3', kind: 'toolCall', tool: 'tab_click', params: {} };
+    const msg = { id: 'req-3', kind: 'toolCall', tool: 'tab_execute_js', params: {} };
     expect(ToolCallRequestSchema.safeParse(msg).success).toBe(false);
   });
 
@@ -119,7 +131,7 @@ describe('GrantsChangedSchema', () => {
   });
 
   it('rejects invalid grants in the list', () => {
-    const msg = { kind: 'grantsChanged', grants: [{ ...grant, mode: 'act' }] };
+    const msg = { kind: 'grantsChanged', grants: [{ ...grant, mode: 'admin' }] };
     expect(GrantsChangedSchema.safeParse(msg).success).toBe(false);
   });
 });
@@ -140,6 +152,12 @@ describe('AuditEntrySchema / AuditEventSchema', () => {
 
   it('accepts a minimal lifecycle entry', () => {
     expect(AuditEntrySchema.safeParse({ ts: 1, type: 'grant_revoked' }).success).toBe(true);
+  });
+
+  it('accepts an optional tabId (per-tab audit view) and rejects invalid ones', () => {
+    expect(AuditEntrySchema.safeParse({ ts: 1, type: 'tool_call', tabId: 42 }).success).toBe(true);
+    expect(AuditEntrySchema.safeParse({ ts: 1, type: 'native_connected' }).success).toBe(true);
+    expect(AuditEntrySchema.safeParse({ ts: 1, type: 'tool_call', tabId: -1 }).success).toBe(false);
   });
 
   it('rejects a negative ts', () => {

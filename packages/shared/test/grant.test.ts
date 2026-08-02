@@ -34,9 +34,9 @@ describe('GrantSchema', () => {
     expect(GrantSchema.safeParse(makeGrant({ grantId: 'not-a-uuid' })).success).toBe(false);
   });
 
-  it('rejects mode other than observe (Stage 1)', () => {
-    const grant = { ...makeGrant(), mode: 'act' };
-    expect(GrantSchema.safeParse(grant).success).toBe(false);
+  it('accepts mode act (Stage 2) and rejects unknown modes', () => {
+    expect(GrantSchema.safeParse({ ...makeGrant(), mode: 'act' }).success).toBe(true);
+    expect(GrantSchema.safeParse({ ...makeGrant(), mode: 'admin' }).success).toBe(false);
   });
 
   it('rejects unknown status', () => {

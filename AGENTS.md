@@ -26,6 +26,7 @@ A **trust-first Chrome extension** (plus backend communication) that lets a user
 | Doc | Role | Freshness rule |
 |---|---|---|
 | `PROJECT_OVERVIEW.md` | Fast re-entry map: state, next actions, open questions | Update whenever state changes; check `as-of` |
+| `REQUIREMENTS.md` | Canonical numbered requirements list (what the system shall do, with status + traceability) | Every behavior change updates it in the same commit |
 | `IDEA.md` | Original intent / north star | Stable |
 | `RESEARCH.md` | Append-only research log (Chrome auto browse, OSS landscape) with dated entries | Re-verify rollout/product claims before commitments |
 | `docs/chrome-tracker-takeaways.md` | Reference system `~/dev/chrome-tracker/`: reusable patterns + gaps to fix | Snapshot as-of 2026-08-02; verify against source before reuse |

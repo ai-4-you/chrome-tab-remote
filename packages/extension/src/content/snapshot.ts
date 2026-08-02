@@ -7,18 +7,37 @@ import {
   READ_TEXT_MAX_CHARS,
   SNAPSHOT_HREF_MAX_CHARS,
   SNAPSHOT_MAX_NODES,
+  SNAPSHOT_MAX_OPTIONS,
   SNAPSHOT_NAME_MAX_CHARS,
 } from '@ctr/shared';
 
 export interface SnapshotCapture {
   result: SnapshotResult;
-  /** ref -> element map for the LAST snapshot; consumed by tab_read. */
+  /** ref -> element map for the LAST snapshot; consumed by tab_read and actions. */
   refMap: Map<string, Element>;
+  /** Counter value after this capture — pass as startAt of the NEXT capture. */
+  nextStart: number;
 }
 
 export type ReadResult =
   | { ok: true; text: string }
-  | { ok: false; code: 'unknown_ref'; message: string };
+  | { ok: false; code: 'unknown_ref' | 'stale_ref'; message: string };
+
+/**
+ * Refs are monotonic across snapshots within one injection (snapshot 2 starts
+ * where snapshot 1 ended), so a ref alone reveals whether it predates the
+ * current snapshot. Acting on stale refs must be impossible, not just unlikely.
+ */
+export function classifyMissingRef(
+  ref: string,
+  refBase: number,
+): { code: 'unknown_ref' | 'stale_ref'; message: string } {
+  const index = /^n(\d+)$/.exec(ref);
+  if (index && Number(index[1]) < refBase) {
+    return { code: 'stale_ref', message: `Ref ${ref} is from an older snapshot.` };
+  }
+  return { code: 'unknown_ref', message: `Unknown ref: ${ref}` };
+}
 
 const SKIP_TAGS = new Set([
   'script',
@@ -70,6 +89,8 @@ const INTERACTIVE_ROLES = new Set([
 
 interface WalkCtx {
   counter: number;
+  /** Counter value at capture start; the per-snapshot node cap is relative to it. */
+  startAt: number;
   truncated: boolean;
   refMap: Map<string, Element>;
   doc: Document;
@@ -235,7 +256,7 @@ function computeHref(el: Element): string | undefined {
 
 /** Allocate the next ref, or null when the node cap is reached (sets truncated). */
 function nextRef(ctx: WalkCtx, el: Element): string | null {
-  if (ctx.counter >= SNAPSHOT_MAX_NODES) {
+  if (ctx.counter - ctx.startAt >= SNAPSHOT_MAX_NODES) {
     ctx.truncated = true;
     return null;
   }
@@ -268,11 +289,31 @@ function walkElement(el: Element, ctx: WalkCtx): SnapshotNode[] {
     const href = computeHref(el);
     if (href !== undefined) node.href = href;
   }
+  // C-6: an agent cannot choose a value it cannot see.
+  if (tag === 'select') {
+    node.options = collectOptions(el as HTMLSelectElement);
+  }
   if (!LEAF_ROLES.has(role)) {
     const children = walkChildren(el, ctx);
     if (children.length > 0) node.children = children;
   }
   return [node];
+}
+
+/** Options of a <select> as "label" or "label (value)" when they differ; capped with a trailing "…". */
+function collectOptions(select: HTMLSelectElement): string[] {
+  const all = Array.from(select.options).map((o) => {
+    const label = collapse(o.label || o.text);
+    return label === o.value || o.value === '' ? label : `${label} (${o.value})`;
+  });
+  return all.length > SNAPSHOT_MAX_OPTIONS ? [...all.slice(0, SNAPSHOT_MAX_OPTIONS), '…'] : all;
+}
+
+/** Short human description of an element, e.g. 'button "Save"' — for approvals and action results. */
+export function describeElement(el: Element): string {
+  const role = computeRole(el) ?? el.tagName.toLowerCase();
+  const name = computeName(el, el.ownerDocument, role);
+  return name ? `${role} ${JSON.stringify(name)}` : role;
 }
 
 /** Walk child nodes; merge consecutive visible text nodes into single text runs. */
@@ -303,13 +344,18 @@ function walkChildren(el: Element, ctx: WalkCtx): SnapshotNode[] {
   return out;
 }
 
-export function captureSnapshot(doc: Document, filter: SnapshotFilter = 'full'): SnapshotCapture {
+export function captureSnapshot(
+  doc: Document,
+  filter: SnapshotFilter = 'full',
+  startAt = 0,
+): SnapshotCapture {
   const win = doc.defaultView;
   if (!win || !doc.body) {
     throw new Error('Document has no window or body.');
   }
   const ctx: WalkCtx = {
-    counter: 0,
+    counter: startAt,
+    startAt,
     truncated: false,
     refMap: new Map(),
     doc,
@@ -319,7 +365,7 @@ export function captureSnapshot(doc: Document, filter: SnapshotFilter = 'full'):
   const rootRef = nextRef(ctx, doc.body);
   const children = walkChildren(doc.body, ctx);
   const tree: SnapshotNode = {
-    ref: rootRef ?? 'n0',
+    ref: rootRef ?? `n${startAt}`,
     role: 'document',
     name: truncateName(collapse(doc.title)),
   };
@@ -334,6 +380,7 @@ export function captureSnapshot(doc: Document, filter: SnapshotFilter = 'full'):
       tree,
     },
     refMap: ctx.refMap,
+    nextStart: ctx.counter,
   };
 }
 
@@ -348,11 +395,13 @@ function capText(text: string): string {
  * tab_read: the text for a ref from the LAST snapshot — not name-truncated like
  * the snapshot (only capped at READ_TEXT_MAX_CHARS to protect the native
  * messaging frame limit). Password redaction is NOT bypassed.
+ * `refBase` distinguishes stale refs (issued by an older snapshot) from
+ * never-issued ones.
  */
-export function readRef(refMap: Map<string, Element>, ref: string): ReadResult {
+export function readRef(refMap: Map<string, Element>, ref: string, refBase = 0): ReadResult {
   const el = refMap.get(ref);
   if (!el) {
-    return { ok: false, code: 'unknown_ref', message: `Unknown ref: ${ref}` };
+    return { ok: false, ...classifyMissingRef(ref, refBase) };
   }
   const tag = el.tagName.toLowerCase();
   if (tag === 'input') {

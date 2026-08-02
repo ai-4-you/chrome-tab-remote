@@ -2,6 +2,7 @@
 // consumer is a language model, so readable text IS the machine format
 // (see AGENTS.md design principles).
 import type { Grant } from './grant.js';
+import type { ActionResult } from './messages.js';
 import type { SnapshotNode, SnapshotResult } from './snapshot.js';
 
 function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
@@ -9,6 +10,9 @@ function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
   if (node.name) parts.push(JSON.stringify(node.name));
   if (node.value !== undefined) parts.push(`value=${JSON.stringify(node.value)}`);
   if (node.href) parts.push(node.href);
+  if (node.options && node.options.length > 0) {
+    parts.push(`options=[${node.options.map((o) => JSON.stringify(o)).join(', ')}]`);
+  }
   out.push(`${'  '.repeat(depth)}- ${parts.join(' ')}`);
   for (const child of node.children ?? []) {
     renderNode(child, depth + 1, out);
@@ -55,10 +59,25 @@ export function renderGrants(grants: Grant[], now: number): string {
           `again in the side panel (grantId ${g.grantId})`
         );
       }
-      const line = `${g.mode} grant for ${g.origin} — ${g.status}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
+      const auto = g.autoApprove ? ', auto-approve ON (actions run without the approval pause)' : '';
+      const line = `${g.mode} grant for ${g.origin} — ${g.status}${auto}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
       return g.status === 'suspended'
         ? `${line} — the user must click 'Re-confirm' in the side panel to resume access`
         : line;
     })
     .join('\n');
+}
+
+/**
+ * Render an executed action as prose with the next-step hint: any action can
+ * mutate the page, so refs from before it must be treated as stale.
+ */
+export function renderActionResult(result: ActionResult): string {
+  const verb =
+    result.action === 'click'
+      ? `Clicked ${result.target}`
+      : result.action === 'fill'
+        ? `Filled ${result.target} with ${JSON.stringify(result.text ?? '')}`
+        : `Selected ${JSON.stringify(result.value ?? '')} in ${result.target}`;
+  return `${verb} (${result.ref}). The page may have changed — take a new tab_snapshot before further actions.`;
 }

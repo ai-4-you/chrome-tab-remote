@@ -8,6 +8,7 @@ import {
   reconfirmGrant,
   revokeGrant,
   revokeGrantsForTab,
+  setAutoApprove,
   suspendGrant,
 } from '../src/background/grant-store.js';
 
@@ -73,5 +74,20 @@ describe('grant-store', () => {
   it('returns undefined when suspending/reconfirming unknown grants', async () => {
     expect(await suspendGrant('nope')).toBeUndefined();
     expect(await reconfirmGrant('nope', ORIGIN)).toBeUndefined();
+  });
+
+  it('toggles auto-approve on act grants only; new grants always start strict', async () => {
+    const observe = await mintGrant(1, ORIGIN);
+    expect(await setAutoApprove(observe.grantId, true)).toBeUndefined();
+    expect((await getGrant(observe.grantId))?.autoApprove).toBeUndefined();
+
+    const act = await mintGrant(1, ORIGIN, Date.now(), 'act');
+    expect(act.autoApprove).toBeUndefined(); // strict by default
+    expect((await setAutoApprove(act.grantId, true))?.autoApprove).toBe(true);
+    expect((await setAutoApprove(act.grantId, false))?.autoApprove).toBe(false);
+
+    // Replacement mints a fresh strict grant — Freaky mode never survives.
+    const replacement = await mintGrant(1, ORIGIN, Date.now(), 'act');
+    expect(replacement.autoApprove).toBeUndefined();
   });
 });

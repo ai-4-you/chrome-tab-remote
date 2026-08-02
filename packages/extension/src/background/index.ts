@@ -7,8 +7,9 @@
 // only covers gesture-scoped access. Accepted for Stage 1; no install-time
 // host_permissions — the side panel requests the granted origin at runtime
 // (optional_host_permissions) and teardown paths drop it again.
-import type { Grant } from '@ctr/shared';
+import type { Grant, GrantMode } from '@ctr/shared';
 import { ToolCallRequestSchema } from '@ctr/shared';
+import { decideApproval, getPendingApproval, setApprovalNotifier } from './approvals.js';
 import { appendAudit, getAudit, setAuditForwarder } from './audit.js';
 import {
   getGrant,
@@ -17,6 +18,7 @@ import {
   reconfirmGrant,
   revokeGrant,
   revokeGrantsForTab,
+  setAutoApprove,
   suspendGrant,
 } from './grant-store.js';
 import { connectNativeHost, getNativeStatus, sendToHost } from './native-port.js';
@@ -28,15 +30,20 @@ void chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch(() => undefined);
 
-// Every audit entry is also forwarded to the host for JSONL persistence.
+// Every audit entry is forwarded to the host for JSONL persistence AND pushes a
+// panel refresh so the audit view never lags behind reality.
 setAuditForwarder((entry) => {
   sendToHost({ kind: 'audit', entry });
+  notifySidePanel();
 });
 
 function notifySidePanel(): void {
   // No listener when the side panel is closed — ignore the rejection.
   void chrome.runtime.sendMessage({ type: 'ctrStateChanged' }).catch(() => undefined);
 }
+
+// Approval-state transitions re-render the panel (shows/hides the approval card).
+setApprovalNotifier(notifySidePanel);
 
 async function broadcastGrants(): Promise<void> {
   const grants = await listGrants();
@@ -83,7 +90,7 @@ export type SidePanelResult =
   | { ok: true; grant?: Grant }
   | { ok: false; error: string };
 
-async function grantActiveTab(tabId: number): Promise<SidePanelResult> {
+async function grantActiveTab(tabId: number, mode: GrantMode): Promise<SidePanelResult> {
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -94,7 +101,7 @@ async function grantActiveTab(tabId: number): Promise<SidePanelResult> {
   if (!origin) {
     return { ok: false, error: 'Only http(s) pages can be granted.' };
   }
-  const grant = await mintGrant(tabId, origin);
+  const grant = await mintGrant(tabId, origin, Date.now(), mode);
   try {
     await injectContentScript(tabId);
   } catch (err) {
@@ -102,7 +109,7 @@ async function grantActiveTab(tabId: number): Promise<SidePanelResult> {
     await dropOriginPermission(origin);
     return { ok: false, error: `Could not inject the content script into this tab. (${String(err)})` };
   }
-  await appendAudit({ type: 'grant_created', grantId: grant.grantId, detail: origin });
+  await appendAudit({ type: 'grant_created', grantId: grant.grantId, tabId, detail: `${origin} (${mode})` });
   await broadcastGrants();
   return { ok: true, grant };
 }
@@ -111,7 +118,7 @@ async function revokeByUser(grantId: string): Promise<SidePanelResult> {
   const revoked = await revokeGrant(grantId);
   if (!revoked) return { ok: false, error: 'No such grant.' };
   await dropOriginPermission(revoked.origin);
-  await appendAudit({ type: 'grant_revoked', grantId, detail: 'revoked by user' });
+  await appendAudit({ type: 'grant_revoked', grantId, tabId: revoked.tabId, detail: 'revoked by user' });
   await broadcastGrants();
   return { ok: true };
 }
@@ -131,7 +138,7 @@ async function reconfirmByUser(grantId: string, expectedOrigin: string): Promise
   } catch {
     await revokeGrant(grantId);
     await dropOriginPermission(grant.origin);
-    await appendAudit({ type: 'grant_revoked', grantId, detail: 'tab gone at re-confirm' });
+    await appendAudit({ type: 'grant_revoked', grantId, tabId: grant.tabId, detail: 'tab gone at re-confirm' });
     await broadcastGrants();
     return { ok: false, error: 'The granted tab no longer exists.' };
   }
@@ -150,7 +157,7 @@ async function reconfirmByUser(grantId: string, expectedOrigin: string): Promise
   } catch (err) {
     return { ok: false, error: `Could not re-inject the content script. (${String(err)})` };
   }
-  await appendAudit({ type: 'grant_reconfirmed', grantId, detail: origin });
+  await appendAudit({ type: 'grant_reconfirmed', grantId, tabId: grant.tabId, detail: origin });
   await broadcastGrants();
   return { ok: true, grant: updated };
 }
@@ -174,6 +181,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     await appendAudit({
       type: 'grant_suspended',
       grantId: grant.grantId,
+      tabId,
       detail: `navigated to ${origin || 'unknown origin'}`,
     });
     await broadcastGrants();
@@ -186,7 +194,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     const removed = await revokeGrantsForTab(tabId);
     for (const grant of removed) {
       await dropOriginPermission(grant.origin);
-      await appendAudit({ type: 'grant_revoked', grantId: grant.grantId, detail: 'tab closed' });
+      await appendAudit({ type: 'grant_revoked', grantId: grant.grantId, tabId, detail: 'tab closed' });
     }
     if (removed.length > 0) await broadcastGrants();
   })();
@@ -198,8 +206,14 @@ interface SidePanelMessage {
   type?: string;
   tabId?: number;
   grantId?: string;
+  /** ctrGrantActiveTab only: 'observe' (default) or 'act'. */
+  mode?: string;
   /** ctrReconfirm only: the origin the side panel showed the user. */
   expectedOrigin?: string;
+  /** ctrApprove / ctrDeny only. */
+  opId?: string;
+  /** ctrSetAutoApprove only. */
+  enabled?: boolean;
 }
 
 chrome.runtime.onMessage.addListener(
@@ -208,7 +222,24 @@ chrome.runtime.onMessage.addListener(
     switch (m.type) {
       case 'ctrGetState':
         void (async () => {
-          sendResponse({ grants: await listGrants(), nativeStatus: getNativeStatus() });
+          const grants = await listGrants();
+          // Title of the granted tab, so the panel can name it when the user
+          // is looking at a DIFFERENT tab ("granted elsewhere").
+          let grantedTab: { id: number; title: string } | null = null;
+          if (grants[0]) {
+            try {
+              const tab = await chrome.tabs.get(grants[0].tabId);
+              grantedTab = { id: grants[0].tabId, title: tab.title ?? '' };
+            } catch {
+              grantedTab = null;
+            }
+          }
+          sendResponse({
+            grants,
+            nativeStatus: getNativeStatus(),
+            pendingApproval: getPendingApproval(),
+            grantedTab,
+          });
         })();
         return true;
       case 'ctrGrantActiveTab':
@@ -216,8 +247,38 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ok: false, error: 'Missing tabId.' });
           return false;
         }
-        void grantActiveTab(m.tabId).then(sendResponse);
+        void grantActiveTab(m.tabId, m.mode === 'act' ? 'act' : 'observe').then(sendResponse);
         return true;
+      case 'ctrSetAutoApprove':
+        if (typeof m.grantId !== 'string' || typeof m.enabled !== 'boolean') {
+          sendResponse({ ok: false, error: 'Missing grantId or enabled.' });
+          return false;
+        }
+        void (async () => {
+          const enabled = m.enabled === true;
+          const updated = await setAutoApprove(m.grantId as string, enabled);
+          if (!updated) {
+            sendResponse({ ok: false, error: 'No act grant with this id.' });
+            return;
+          }
+          await appendAudit({
+            type: enabled ? 'auto_approve_enabled' : 'auto_approve_disabled',
+            grantId: updated.grantId,
+            tabId: updated.tabId,
+            detail: enabled ? 'Freaky mode ON — actions run without asking' : 'per-action approval restored',
+          });
+          await broadcastGrants();
+          sendResponse({ ok: true });
+        })();
+        return true;
+      case 'ctrApprove':
+      case 'ctrDeny':
+        if (typeof m.opId !== 'string') {
+          sendResponse({ ok: false, error: 'Missing opId.' });
+          return false;
+        }
+        sendResponse({ ok: decideApproval(m.opId, m.type === 'ctrApprove') });
+        return false;
       case 'ctrRevoke':
         if (typeof m.grantId !== 'string') {
           sendResponse({ ok: false, error: 'Missing grantId.' });
@@ -233,7 +294,9 @@ chrome.runtime.onMessage.addListener(
         void reconfirmByUser(m.grantId, m.expectedOrigin).then(sendResponse);
         return true;
       case 'ctrGetAudit':
-        void getAudit(20).then((entries) => sendResponse({ entries }));
+        // 100, not 20: the panel filters per-tab, so it needs headroom to still
+        // show up to 20 entries for the active tab.
+        void getAudit(100).then((entries) => sendResponse({ entries }));
         return true;
       default:
         return false;

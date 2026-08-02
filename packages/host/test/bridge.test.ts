@@ -77,6 +77,14 @@ describe('Bridge', () => {
     await expect(promise).resolves.toBe('late but fine');
   });
 
+  it('honors a per-call timeout override (act tools outlive the default 15s)', async () => {
+    vi.useFakeTimers();
+    const promise = bridge.callTool('tab_click', { ref: 'n7' }, DEFAULT_TOOL_TIMEOUT_MS * 4);
+    vi.advanceTimersByTime(DEFAULT_TOOL_TIMEOUT_MS * 4 - 1);
+    bridge.handleMessage({ id: sent[0]!.id, kind: 'toolResult', ok: true, result: 'approved late' });
+    await expect(promise).resolves.toBe('approved late');
+  });
+
   it('ignores toolResults with unknown ids (logged, no crash)', () => {
     bridge.handleMessage({ id: 'never-sent', kind: 'toolResult', ok: true, result: 1 });
     expect(logs.some((l) => l.includes('unknown id'))).toBe(true);

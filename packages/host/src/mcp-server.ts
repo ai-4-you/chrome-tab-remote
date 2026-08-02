@@ -3,10 +3,13 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { SnapshotFilter, ToolName } from '@ctr/shared';
+import type { ActToolName, SnapshotFilter, ToolName } from '@ctr/shared';
 import {
+  ACT_TOOL_TIMEOUT_MS,
+  ActionResultSchema,
   ERROR_RECOVERY,
   GrantListResultSchema,
+  renderActionResult,
   renderGrants,
   renderSnapshot,
   SNAPSHOT_FILTERS,
@@ -37,7 +40,7 @@ export function resolveMcpPort(
 
 /** The subset of Bridge the MCP tools need; kept small for testability. */
 export interface ToolBridge {
-  callTool(tool: ToolName, params: Record<string, unknown>): Promise<unknown>;
+  callTool(tool: ToolName, params: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
 }
 
 function okResult(data: unknown): CallToolResult {
@@ -108,6 +111,22 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
         return textResult(
           parsed.data.text === '' ? '[empty — the element has no text content or value]' : parsed.data.text,
         );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    tabAction: async (
+      tool: ActToolName,
+      args: { grantId?: string; ref: string; text?: string; value?: string },
+    ): Promise<CallToolResult> => {
+      try {
+        const extra: Record<string, unknown> = { ref: args.ref };
+        if (args.text !== undefined) extra['text'] = args.text;
+        if (args.value !== undefined) extra['value'] = args.value;
+        // Long per-call timeout: the user-approval wait happens inside this call.
+        const raw = await bridge.callTool(tool, grantParams(args.grantId, extra), ACT_TOOL_TIMEOUT_MS);
+        const parsed = ActionResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderActionResult(parsed.data)) : okResult(raw);
       } catch (error) {
         return errorResult(error);
       }
@@ -189,6 +208,61 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
       },
     },
     handlers.tabRead,
+  );
+
+  const REF_INPUT = z
+    .string()
+    .regex(/^n\d+$/)
+    .describe('Node ref from the LATEST tab_snapshot, e.g. "n42". Older refs fail with stale_ref.');
+
+  const ACT_COMMON =
+    'Requires a grant with actions allowed (the user ticks "allow actions" when granting; ' +
+    'otherwise you get observe_only). EVERY action pauses for explicit user approval in ' +
+    'the side panel — this call can take up to 2 minutes; tell the user to look at the ' +
+    'panel. Exception: if the user enabled auto-approve on the grant (list_grants shows ' +
+    '"auto-approve ON"), actions run immediately without the pause. approval_denied means ' +
+    'the user said no: do NOT retry the same action. After any action the page may change ' +
+    '— take a new tab_snapshot before the next one.';
+
+  server.registerTool(
+    'tab_click',
+    {
+      description:
+        `Click one element in the granted tab, addressed by a snapshot ref. ${ACT_COMMON}`,
+      inputSchema: { grantId: GRANT_ID_INPUT, ref: REF_INPUT },
+    },
+    ({ grantId, ref }) => handlers.tabAction('tab_click', { grantId, ref }),
+  );
+
+  server.registerTool(
+    'tab_fill',
+    {
+      description:
+        'Clear and fill one text input or textarea in the granted tab with the given text. ' +
+        `The user sees the exact text before approving. Password fields always refuse. ${ACT_COMMON}`,
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        ref: REF_INPUT,
+        text: z.string().describe('The text to write into the field (replaces the current value).'),
+      },
+    },
+    ({ grantId, ref, text }) => handlers.tabAction('tab_fill', { grantId, ref, text }),
+  );
+
+  server.registerTool(
+    'tab_select',
+    {
+      description:
+        'Choose an option in a <select> (combobox) in the granted tab. Pass the option value ' +
+        'or its visible label — the snapshot lists them as options=[…] on combobox nodes. ' +
+        `${ACT_COMMON}`,
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        ref: REF_INPUT,
+        value: z.string().describe('Option value or visible label, as listed in the snapshot.'),
+      },
+    },
+    ({ grantId, ref, value }) => handlers.tabAction('tab_select', { grantId, ref, value }),
   );
 
   return server;

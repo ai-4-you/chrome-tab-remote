@@ -7,6 +7,11 @@ export const ERROR_CODES = [
   'grant_suspended',
   'grant_revoked',
   'unknown_ref',
+  'stale_ref',
+  'invalid_target',
+  'observe_only',
+  'approval_denied',
+  'approval_timeout',
   'tab_unreachable',
   'timeout',
 ] as const;
@@ -41,6 +46,21 @@ export const ERROR_RECOVERY: Record<ErrorCode, string> = {
   unknown_ref:
     'This ref is not part of the latest snapshot (the page may have changed). Call ' +
     'tab_snapshot again and use a ref from the fresh result.',
+  stale_ref:
+    'This ref is from an OLDER snapshot; the page has been re-captured since. Call ' +
+    'tab_snapshot again and target a ref from the fresh result — never act on stale refs.',
+  invalid_target:
+    'The element cannot perform this action (wrong element kind, missing option, or a ' +
+    'protected field). Take a fresh tab_snapshot and check the element role and options.',
+  observe_only:
+    'The grant is observe-only; actions are not authorized. Ask the user to revoke and ' +
+    "re-grant the tab with 'allow actions' enabled in the side panel if acting is wanted.",
+  approval_denied:
+    'The user DECLINED this action in the side panel. Do not retry the same action; ask ' +
+    'the user what they would like to do instead.',
+  approval_timeout:
+    'The approval request expired without a user decision. Ask the user to keep the side ' +
+    'panel open and watch for the approval card, then retry if the action is still wanted.',
   tab_unreachable:
     'The granted tab did not respond. Ask the user to check the tab is still open and ' +
     'fully loaded (reload if needed), then retry.',

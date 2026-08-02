@@ -3,9 +3,45 @@ import { GrantSchema } from './grant.js';
 import { ToolErrorSchema } from './errors.js';
 
 /** MCP tool names exposed by the host; bridged 1:1 over native messaging. */
-export const TOOL_NAMES = ['tab_snapshot', 'tab_read', 'list_grants'] as const;
+export const TOOL_NAMES = [
+  'tab_snapshot',
+  'tab_read',
+  'list_grants',
+  'tab_click',
+  'tab_fill',
+  'tab_select',
+] as const;
 export const ToolNameSchema = z.enum(TOOL_NAMES);
 export type ToolName = z.infer<typeof ToolNameSchema>;
+
+/** The mutating tools; every one requires an 'act' grant AND per-action user approval. */
+export const ACT_TOOL_NAMES = ['tab_click', 'tab_fill', 'tab_select'] as const;
+export type ActToolName = (typeof ACT_TOOL_NAMES)[number];
+export function isActTool(tool: ToolName): tool is ActToolName {
+  return (ACT_TOOL_NAMES as readonly string[]).includes(tool);
+}
+
+/**
+ * Approval timing: the extension waits APPROVAL_TIMEOUT_MS for the user's
+ * decision; the host waits ACT_TOOL_TIMEOUT_MS for the whole call. The
+ * extension timeout is intentionally shorter so the agent gets the specific
+ * approval_timeout error, not a generic bridge timeout.
+ */
+export const APPROVAL_TIMEOUT_MS = 110_000;
+export const ACT_TOOL_TIMEOUT_MS = 120_000;
+
+/** Result shape of a successfully executed action (tab_click/tab_fill/tab_select). */
+export const ActionResultSchema = z.object({
+  action: z.enum(['click', 'fill', 'select']),
+  ref: z.string().regex(/^n\d+$/),
+  /** Short human description of the element acted on, e.g. 'button "Save"'. */
+  target: z.string(),
+  /** fill only: the text that was written. */
+  text: z.string().optional(),
+  /** select only: the option that ended up selected. */
+  value: z.string().optional(),
+});
+export type ActionResult = z.infer<typeof ActionResultSchema>;
 
 /** host -> extension: request execution of one tool call. */
 export const ToolCallRequestSchema = z.object({
@@ -53,6 +89,8 @@ export const AuditEntrySchema = z.object({
   /** Lifecycle or tool event type, e.g. 'grant_created', 'tool_call'. */
   type: z.string().min(1),
   grantId: z.string().optional(),
+  /** Tab the event concerns — powers the side panel's per-tab audit view. Absent for system events (native_connected, …). */
+  tabId: z.number().int().nonnegative().optional(),
   tool: z.string().optional(),
   ok: z.boolean().optional(),
   detail: z.string().optional(),

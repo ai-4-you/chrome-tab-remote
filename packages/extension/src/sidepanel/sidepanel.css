@@ -201,3 +201,46 @@ h2 {
 .hidden {
   display: none;
 }
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  margin-top: 1px;
+}
+
+#approval-section {
+  border: 1px solid var(--danger);
+}
+
+.approval-text {
+  margin: 4px 0;
+  font-weight: 600;
+}
+
+.share-status {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.freaky-row {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 6px;
+  color: var(--danger);
+}
+
+.freaky-warning {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
