@@ -31,13 +31,30 @@ function textOf(result: { content: { type: string; text?: string }[] }): string 
 }
 
 describe('createToolHandlers', () => {
-  it('list_grants bridges to callTool so the extension audits the enumeration', async () => {
+  it('list_grants bridges to callTool and renders prose lines, not JSON', async () => {
     const callTool = vi.fn(async () => ({ grants: [GRANT] }));
-    const handlers = createToolHandlers(stubBridge({ callTool }));
+    // Clock injected 12 min before the fixture's expiresAt for determinism.
+    const now = () => Date.parse(GRANT.expiresAt) - 12 * 60 * 1000;
+    const handlers = createToolHandlers(stubBridge({ callTool }), now);
     const result = await handlers.listGrants();
     expect(callTool).toHaveBeenCalledWith('list_grants', {});
     expect(result.isError).toBeUndefined();
-    expect(JSON.parse(textOf(result))).toEqual({ grants: [GRANT] });
+    const text = textOf(result);
+    expect(text).toContain('observe grant for https://docs.example.com — active, expires in ~12 min');
+    expect(text).toContain(`grantId ${GRANT.grantId}`);
+    expect(() => JSON.parse(text)).toThrow();
+  });
+
+  it('list_grants falls back to JSON for unexpected result shapes', async () => {
+    const handlers = createToolHandlers(stubBridge({ callTool: vi.fn(async () => ({ weird: 1 })) }));
+    const result = await handlers.listGrants();
+    expect(JSON.parse(textOf(result))).toEqual({ weird: 1 });
+  });
+
+  it('list_grants renders the empty list as the recovery instruction', async () => {
+    const handlers = createToolHandlers(stubBridge({ callTool: vi.fn(async () => ({ grants: [] })) }));
+    const result = await handlers.listGrants();
+    expect(textOf(result)).toContain("click 'Grant observe access'");
   });
 
   it('list_grants fails closed when the extension is unreachable (no stale cache)', async () => {
@@ -101,12 +118,26 @@ describe('createToolHandlers', () => {
     expect(callTool).toHaveBeenCalledWith('tab_read', { ref: 'n1' });
   });
 
-  it('tab_read bridges to callTool with grantId and ref', async () => {
-    const callTool = vi.fn(async () => ({ text: 'full element text' }));
+  it('tab_read returns the element text plainly, without a JSON envelope', async () => {
+    const callTool = vi.fn(async () => ({ ref: 'n42', text: 'A quote: "hi"\nSecond line.' }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     const result = await handlers.tabRead({ grantId: GRANT.grantId, ref: 'n42' });
     expect(callTool).toHaveBeenCalledWith('tab_read', { grantId: GRANT.grantId, ref: 'n42' });
-    expect(JSON.parse(textOf(result))).toEqual({ text: 'full element text' });
+    expect(textOf(result)).toBe('A quote: "hi"\nSecond line.');
+  });
+
+  it('tab_read marks an empty element explicitly instead of returning a blank result', async () => {
+    const callTool = vi.fn(async () => ({ ref: 'n5', text: '' }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabRead({ ref: 'n5' });
+    expect(textOf(result)).toBe('[empty — the element has no text content or value]');
+  });
+
+  it('tab_read falls back to JSON for unexpected result shapes', async () => {
+    const callTool = vi.fn(async () => ({ unexpected: true }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabRead({ grantId: GRANT.grantId, ref: 'n42' });
+    expect(JSON.parse(textOf(result))).toEqual({ unexpected: true });
   });
 
   it('maps ToolCallError to an MCP tool error with the protocol code AND a recovery instruction', async () => {

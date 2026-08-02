@@ -33,6 +33,12 @@ export const ToolResultSchema = z.union([
 ]);
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
+/** Result shape of the list_grants tool. */
+export const GrantListResultSchema = z.object({
+  grants: z.array(GrantSchema),
+});
+export type GrantListResult = z.infer<typeof GrantListResultSchema>;
+
 /** extension -> host: current grant list (sent on connect and on every change). */
 export const GrantsChangedSchema = z.object({
   kind: z.literal('grantsChanged'),

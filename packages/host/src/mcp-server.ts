@@ -4,7 +4,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { SnapshotFilter, ToolName } from '@ctr/shared';
-import { ERROR_RECOVERY, renderSnapshot, SNAPSHOT_FILTERS, SnapshotResultSchema } from '@ctr/shared';
+import {
+  ERROR_RECOVERY,
+  GrantListResultSchema,
+  renderGrants,
+  renderSnapshot,
+  SNAPSHOT_FILTERS,
+  SnapshotResultSchema,
+  TabReadResultSchema,
+} from '@ctr/shared';
 import { ToolCallError } from './bridge.js';
 
 export const DEFAULT_MCP_PORT = 8917;
@@ -55,7 +63,7 @@ function grantParams(grantId: string | undefined, rest: Record<string, unknown> 
 }
 
 /** Tool handler functions, separated from MCP wiring so they are unit-testable with a stub bridge. */
-export function createToolHandlers(bridge: ToolBridge) {
+export function createToolHandlers(bridge: ToolBridge, now: () => number = () => Date.now()) {
   return {
     listGrants: async (): Promise<CallToolResult> => {
       try {
@@ -63,7 +71,9 @@ export function createToolHandlers(bridge: ToolBridge) {
         // grant enumeration is audited like every other tool call — side-panel
         // ring buffer + host JSONL. Also fails closed instead of serving a
         // stale grant list when the extension is disconnected.
-        return okResult(await bridge.callTool('list_grants', {}));
+        const raw = await bridge.callTool('list_grants', {});
+        const parsed = GrantListResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderGrants(parsed.data.grants, now())) : okResult(raw);
       } catch (error) {
         return errorResult(error);
       }
@@ -87,7 +97,17 @@ export function createToolHandlers(bridge: ToolBridge) {
     },
     tabRead: async ({ grantId, ref }: { grantId?: string; ref: string }): Promise<CallToolResult> => {
       try {
-        return okResult(await bridge.callTool('tab_read', grantParams(grantId, { ref })));
+        const raw = await bridge.callTool('tab_read', grantParams(grantId, { ref }));
+        // Plain text, no JSON envelope: the agent asked for this ref's text and
+        // gets exactly that (escaping a long article as a JSON string costs
+        // tokens and readability). Truncation is marked inline by the script.
+        const parsed = TabReadResultSchema.safeParse(raw);
+        if (!parsed.success) return okResult(raw);
+        // An empty element is a legitimate answer — say so instead of returning
+        // a blank result an agent cannot tell apart from a broken tool.
+        return textResult(
+          parsed.data.text === '' ? '[empty — the element has no text content or value]' : parsed.data.text,
+        );
       } catch (error) {
         return errorResult(error);
       }
@@ -119,7 +139,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
         'after 30 minutes, and the user can revoke it at any time. Without an active grant ' +
         'no tab can be observed — errors tell you what to ask the user to do. You do NOT ' +
         'need to call this before tab_snapshot/tab_read: those default to the single active ' +
-        'grant. Call it to see which site is shared and when the grant expires (expiresAt).',
+        'grant. Call it to see which site is shared and the minutes left until expiry.',
     },
     handlers.listGrants,
   );

@@ -72,7 +72,9 @@ The agent never sees raw DOM or screenshots. The content script produces a struc
 
 **Agent ergonomics (implemented 2026-08-02):** `tab_snapshot` supports `filter: 'interactive' | 'full'` (interactive = controls + headings only, far fewer tokens); link nodes carry absolute http(s) `href`s (capped); the MCP result is rendered as compact indented text (`- n4 link "Contact" https://…`) instead of a JSON tree; `grantId` is optional on all tools (defaults to the single grant — max 1 by design); protocol errors append a per-code recovery instruction ("Next step: ask the user to re-confirm …"); tool descriptions teach the workflow (snapshot first, ref validity, redaction).
 
-**Later candidates (ranked, not yet built):** `tab_find(query, role?)` returning matching refs; snapshot ids + `stale_ref` errors instead of silently serving old refs; subtree scoping (`tab_snapshot(scope: ref)`); `wait_for` and snapshot diffs once actions exist.
+All tool results are prose-shaped (principle in `AGENTS.md`): `tab_read` returns the element text plainly (no JSON envelope), `list_grants` renders one line per grant with expiry as derived minutes and turns the empty list into the no_grant recovery instruction.
+
+**Later candidates (ranked, not yet built):** `tab_find(query, role?)` returning matching refs; snapshot ids + `stale_ref` errors instead of silently serving old refs; subtree scoping (`tab_snapshot(scope: ref)`); `wait_for` and snapshot diffs once actions exist; MCP `structuredContent` + `outputSchema` alongside the text if programmatic consumers ever need it.
 
 **Stage 2 prerequisite:** `combobox` is a leaf role, so `<select>` options are invisible in snapshots. Expose the option list (values + labels) before implementing `select(ref, value)` — an agent cannot choose a value it cannot see.
 

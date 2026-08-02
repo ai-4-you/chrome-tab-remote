@@ -1,6 +1,7 @@
-// Compact indented-text rendering of a snapshot — the MCP tool output format.
-// Roughly halves the token cost versus the JSON tree while keeping every ref
-// usable with tab_read.
+// Compact prose rendering of tool results — the MCP output format. The
+// consumer is a language model, so readable text IS the machine format
+// (see AGENTS.md design principles).
+import type { Grant } from './grant.js';
 import type { SnapshotNode, SnapshotResult } from './snapshot.js';
 
 function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
@@ -29,4 +30,35 @@ export function renderSnapshot(result: SnapshotResult): string {
   }
   renderNode(result.tree, 0, out);
   return out.join('\n');
+}
+
+/**
+ * Render the grant list as one prose line per grant, with expiry as derived
+ * minutes (agents should not do timestamp arithmetic). The empty case is an
+ * instruction, not a bare empty list. Expiry wins over stored status: the
+ * store does not recompute status on read, and an expired grant cannot be
+ * resumed by re-confirming — only re-granting helps.
+ */
+export function renderGrants(grants: Grant[], now: number): string {
+  if (grants.length === 0) {
+    return (
+      'No grants. Ask the user to open the Chrome Tab Remote side panel on the tab ' +
+      "they want to share and click 'Grant observe access'."
+    );
+  }
+  return grants
+    .map((g) => {
+      const msLeft = Date.parse(g.expiresAt) - now;
+      if (msLeft <= 0) {
+        return (
+          `${g.mode} grant for ${g.origin} — expired; the user must grant the tab ` +
+          `again in the side panel (grantId ${g.grantId})`
+        );
+      }
+      const line = `${g.mode} grant for ${g.origin} — ${g.status}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
+      return g.status === 'suspended'
+        ? `${line} — the user must click 'Re-confirm' in the side panel to resume access`
+        : line;
+    })
+    .join('\n');
 }

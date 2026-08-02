@@ -25,6 +25,8 @@ The goal is an extension so small, so boring, and so reviewable that a security-
 
 Chrome extension (your consent UI + enforcement) → native messaging → a small local helper process → MCP server on `http://127.0.0.1:8917/mcp` (localhost only, DNS-rebinding protected). Design details and roadmap: [plan.md](./plan.md).
 
+One design principle shapes everything the tools return: **the consumer is a language model, so prose-shaped output is the machine format.** Snapshots arrive as compact indented text rather than JSON trees, and errors state the concrete next step ("ask the user to re-confirm in the side panel") instead of just a diagnosis.
+
 ## Try it yourself — manual test walkthrough
 
 Prerequisites: Node 22+, Google Chrome, macOS (installer script; other OSes need a manual native-host manifest).
@@ -92,7 +94,7 @@ If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe-only) — implemented, unit-tested (148 tests) and verified end-to-end against a real tab on 2026-08-02. Honest gaps, tracked in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md):
+Stage 1 (observe-only) — implemented, unit-tested (158 tests) and verified end-to-end against a real tab on 2026-08-02. Honest gaps, tracked in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md):
 
 - The local MCP endpoint has **no authentication yet** — other processes on *your own machine* could read the granted tab while a grant is active. Localhost-only + DNS-rebinding protection are in place; token auth is the first item of the next stage.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
@@ -101,7 +103,7 @@ Stage 1 (observe-only) — implemented, unit-tested (148 tests) and verified end
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 148 tests + dependency audit
+./precommit.sh   # typecheck + lint + 158 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

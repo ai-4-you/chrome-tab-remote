@@ -12,25 +12,12 @@ await client.connect(new StreamableHTTPClientTransport(url));
 const tools = await client.listTools();
 console.log('TOOLS:', tools.tools.map((t) => t.name).join(', '));
 
+// list_grants renders prose lines (one per grant, or a recovery instruction).
 const grantsRes = await client.callTool({ name: 'list_grants', arguments: {} });
-const grantsText = grantsRes.content?.[0]?.text ?? '';
-console.log('LIST_GRANTS:', grantsRes.isError ? 'ERROR' : 'ok', grantsText.slice(0, 400));
+console.log('LIST_GRANTS:', grantsRes.isError ? 'ERROR' : 'ok', (grantsRes.content?.[0]?.text ?? '').slice(0, 400));
 
-const grants = (() => {
-  try {
-    return JSON.parse(grantsText).grants ?? [];
-  } catch {
-    return [];
-  }
-})();
-const active = grants.find((g) => g.status === 'active');
-if (!active) {
-  console.log('NO ACTIVE GRANT — grant a tab in the side panel, then re-run.');
-  await client.close();
-  process.exit(0);
-}
-
-// grantId is deliberately omitted: the extension defaults to the single active grant.
+// grantId is deliberately omitted: the extension defaults to the single active
+// grant, and without one the error text explains what to do.
 const snap = await client.callTool({ name: 'tab_snapshot', arguments: {} });
 const snapText = snap.content?.[0]?.text ?? '';
 console.log('TAB_SNAPSHOT:', snap.isError ? `ERROR ${snapText.slice(0, 300)}` : 'ok');

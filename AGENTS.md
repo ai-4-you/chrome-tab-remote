@@ -11,7 +11,9 @@ A **trust-first Chrome extension** (plus backend communication) that lets a user
 - **2026-08-02:** Focus is the Chrome extension and its communication with a backend system only. The knowledge-gathering/RAG side of the reference system chrome-tracker is explicitly **out of scope**.
 - The extension is purpose-built for interactive tab control — no tracking/knowledge-base machinery bundled in.
 
-## Design principles (agreed direction, not yet implemented)
+## Design principles
+
+- **Agent-facing output is prose-shaped:** the consumer of MCP tool results is a language model, so compact readable text **is** the machine format. JSON only earns its place when something programmatic re-reads the result — and then as MCP `structuredContent` *alongside* the text, never instead of it. Errors follow the same rule: every error carries a concrete "Next step:" recovery instruction, not just a diagnosis.
 
 - **Per-tab consent as a capability token:** the user's explicit tab selection — not "whatever tab is active" — authorizes observation/control.
 - **Minimal permissions:** avoid `<all_urls>`; prefer runtime/host-scoped permissions and `activeTab`-style gestures.

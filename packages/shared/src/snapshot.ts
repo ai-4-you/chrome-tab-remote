@@ -51,6 +51,13 @@ export const SNAPSHOT_HREF_MAX_CHARS = 300;
  */
 export const READ_TEXT_MAX_CHARS = 200_000;
 
+/** Result shape of tab_read as produced by the content script. */
+export const TabReadResultSchema = z.object({
+  ref: z.string().regex(/^n\d+$/),
+  text: z.string(),
+});
+export type TabReadResult = z.infer<typeof TabReadResultSchema>;
+
 export const SnapshotResultSchema = z.object({
   url: z.string().url(),
   title: z.string(),
