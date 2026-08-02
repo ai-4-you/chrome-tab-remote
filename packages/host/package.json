@@ -1,0 +1,19 @@
+{
+  "name": "@ctr/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "chrome-tab-remote-host": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "install-host": "node scripts/install-native-host.mjs"
+  },
+  "dependencies": {
+    "@ctr/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Chrome Tab Remote",
+  "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxkC6LzpqOLUH+r9xFB0q3fqhjo/CYwdvoW2gHsWPuXDZGg0a6KqVjj0HRGFw8lXDRPgKSm8a8I/c9sNRJGEGtZ1wEnCvSu5m9eUS5CL2VE5ECgZ8f9Csf5yuTFs6uot+zQmjob0qmk6O1h1Gh9D28X6WPJUNj1cMxDkmnEnQE8iE8WPQgk8lUmPPyQvqnIiZxT8a84Ok8+pY4Sh/Va/t4+e3CLi/a9d08cDJBp8ACUHrpBnzzeWU8iONPm1NiHqYt/5Dgfp9QImnDP/qAHz3W1gPsDqLcNXV9lRjOPc/HNNxilz33nhRf3TV/lNZbbWPKK9k5s53GIfkzj4vUYilTwIDAQAB",
+  "description": "Grant an agent revocable, origin-pinned, observe-only access to exactly one tab.",
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "tabs",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "nativeMessaging"
+  ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Chrome Tab Remote"
+  }
+}

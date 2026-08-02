@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chrome Tab Remote</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Chrome Tab Remote</h1>
+      <div class="host-status">
+        <span class="label">Native host</span>
+        <span id="native-status" class="badge badge-off">…</span>
+      </div>
+    </header>
+
+    <section class="card" id="tab-section">
+      <h2>Current tab</h2>
+      <div id="current-tab-title" class="tab-title">—</div>
+      <div id="current-tab-origin" class="muted">—</div>
+      <button id="grant-btn" class="btn btn-primary">Grant observe access (30 min)</button>
+      <div id="grant-error" class="error hidden"></div>
+    </section>
+
+    <section class="card hidden" id="grant-section">
+      <h2>Active grant</h2>
+      <div class="grant-row">
+        <span class="label">Origin</span>
+        <span id="grant-origin" class="mono"></span>
+      </div>
+      <div class="grant-row">
+        <span class="label">Status</span>
+        <span id="grant-status" class="badge"></span>
+      </div>
+      <div class="grant-row">
+        <span class="label">Expires</span>
+        <span id="grant-expiry" class="mono"></span>
+      </div>
+      <div class="btn-row">
+        <button id="reconfirm-btn" class="btn hidden">Re-confirm</button>
+        <button id="revoke-btn" class="btn btn-danger">Revoke</button>
+      </div>
+    </section>
+
+    <section class="card" id="audit-section">
+      <h2>Audit trail</h2>
+      <ul id="audit-list" class="audit-list"></ul>
+    </section>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

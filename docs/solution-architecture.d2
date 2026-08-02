@@ -1,0 +1,37 @@
+direction: down
+
+title: |md
+  # chrome-tab-remote — proposed architecture
+| {near: top-center}
+
+user: User {
+  shape: person
+}
+
+chrome: Chrome (user's real browser) {
+  tab: Granted tab {
+    cs: Content script\n(injected on grant only)
+  }
+  ext: Extension (MV3) {
+    style.fill: "#eef6ff"
+    panel: Side panel\n(select tab, approve, audit)
+    core: Service worker\n(grant store, lifecycle, policy)
+  }
+}
+
+bridge: Native messaging host\n(local process) {
+  style.fill: "#fff7e6"
+  mcp: MCP server\n(tools: snapshot, click, fill, ...)
+}
+
+agent: Agent backend\n(any MCP client:\nlocal agent, Claude, custom) {
+  style.fill: "#f3f0ff"
+}
+
+user -> chrome.ext.panel: 1. selects tab,\ngrants access (gesture)
+chrome.ext.core -> chrome.tab.cs: 2. inject via\nchrome.scripting (tabId only)
+agent -> bridge.mcp: 3. MCP tool call\n(snapshot / act)
+bridge.mcp -> chrome.ext.core: 4. relay\n(stdio <-> runtime port)
+chrome.ext.core -> chrome.ext.panel: 5. consequential action?\n-> approval gate
+chrome.tab.cs -> chrome.ext.core: 6. a11y-tree snapshot,\naction results
+chrome.ext.core -> bridge.mcp: 7. result + ack\n(operation lifecycle)
