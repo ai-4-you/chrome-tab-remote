@@ -174,7 +174,7 @@ For Germany, §87(1) no. 6 BetrVG gives the works council co-determination over 
 
 ## References — continuation
 
-- Local baseline: [`~/dev/chrome-tracker/tracker/manifest.json`](file:///Users/cgint/dev/chrome-tracker/tracker/manifest.json) and [`background.js`](file:///Users/cgint/dev/chrome-tracker/tracker/background.js).
+- Local baseline: `~/dev/chrome-tracker/tracker/manifest.json` and `background.js` (private reference repo; takeaways captured in `docs/chrome-tracker-takeaways.md`).
 - Local CLI: [`agent-browser` help](https://www.agent-browser.dev/) — verified locally with `agent-browser -h` and `agent-browser --version` (`0.27.0`) on 2026-08-02.
 - Chrome Enterprise — [Extension Settings policy](https://chromeenterprise.google/policies/extension-settings/).
 - Chrome Enterprise — [Chrome policy list](https://chromeenterprise.google/policies/).

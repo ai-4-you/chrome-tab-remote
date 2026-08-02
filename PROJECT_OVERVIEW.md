@@ -1,6 +1,6 @@
 # PROJECT_OVERVIEW — chrome-tab-remote
 
-> as-of: 2026-08-02 · phase: **Stage 2 (act: click/fill/select + approval gate) implemented, 193 tests — awaiting Chrome reload + live E2E act test**
+> as-of: 2026-08-02 · phase: **Stages 1–2 + assist features implemented, live-verified (Chrome + Brave), externally reviewed, MIT-licensed — public-release ready; 231 tests**
 
 ## Current state
 
@@ -12,7 +12,7 @@
 
 ## Current state (Stage 2, 2026-08-02)
 
-- **Stage 2 implemented per `REQUIREMENTS.md` §7** (uncommitted): 'act' grants (side-panel checkbox), `tab_click`/`tab_fill`/`tab_select` on snapshot refs, per-action approval gate in the side panel (110 s auto-deny, one at a time, post-approval grant re-validation), monotonic refs → `stale_ref` by construction (rejected before the user is asked), `<select>` options on combobox nodes, password-fill refusal, action audit events, prose action results, host per-call timeout (120 s for act tools). 193 tests, precommit green, built.
+- **Stage 2 implemented per `REQUIREMENTS.md` §7**: 'act' grants (side-panel checkbox), `tab_click`/`tab_fill`/`tab_select` on snapshot refs, per-action approval gate in the side panel (110 s auto-deny, one at a time, post-approval grant re-validation), monotonic refs → `stale_ref` by construction (rejected before the user is asked), `<select>` options on combobox nodes, password-fill refusal, action audit events, prose action results, host per-call timeout (120 s for act tools). 193 tests, precommit green, built.
 - New error codes: `stale_ref`, `invalid_target`, `observe_only`, `approval_denied`, `approval_timeout` — all with recovery texts.
 
 ## Assist package (2026-08-02, from "what would help user+agent" ideation)
@@ -31,7 +31,7 @@
 1. ✅ Live E2E act test passed 2026-08-02: approve→real click (navigated /Montag→/Bauernliste), deny→approval_denied untouched, 4× timeout auto-deny, stale-world recovery after action, audit chain complete. Learning: approval needs the side panel visible — mcporter needs `--timeout 130000` (its 60 s default < our 110 s approval window).
 2. **Tab-scoped panel (G-9) implemented 2026-08-02** after user feedback ("panel looked like heise.de was granted"): panel renders relative to the active tab — share-status line, "granted on another tab" card (go-to-tab/revoke), explicit Replace button, per-tab audit view (entries stamped with `tabId`, "show all" toggle, JSONL stays global), audit-lag fix (panel push on every entry), approval card gains go-to-tab. 194 tests. Needs extension reload + visual check by user.
 2a. **Freaky mode (C-9) implemented 2026-08-02** (user request; UI name 'Freaky', code `autoApprove`): live-toggleable per-grant auto-approve on the grant card, gate reads current grant state per action, dies with the grant, audited (`auto_approve_enabled/disabled`, `action_auto_approved`), announced to the agent via list_grants. 198 tests.
-3. Commit Stage 2 + G-9 + Freaky mode (user decision — uncommitted). Remaining observe burn-down rows (suspension/re-confirm, tab-close teardown, `[empty]` marker, X-5 expired rendering) fold into any future manual session via README §5.
+3. ✅ All work committed (14+ commits on main). Remaining observe burn-down rows (suspension/re-confirm, tab-close teardown, `[empty]` marker, X-5 expired rendering) fold into any future manual session via README §5.
 4. Cosmetic follow-up: duplicate `native_connected` audit entries (~5× within a second) suggest reconnect churn — investigate native-port connect path.
 5. Optional: second review round over the 16 unverified findings; Stage 3 candidates per plan.md (batch approval, persistent grants) and REQUIREMENTS later-candidates (`tab_find`, subtree scoping, `wait_for`). **User decision 2026-08-02: MCP token auth deprioritized** (fully local deployment; localhost + DNS-rebinding protection accepted for now).
 

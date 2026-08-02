@@ -1,6 +1,6 @@
 # plan.md — Proposed solution: chrome-tab-remote
 
-> as-of: 2026-08-02 · status: **design proposal, awaiting approval** · no code yet
+> as-of: 2026-08-02 · status: **implemented** (Stages 1–2 + assist features; see `REQUIREMENTS.md` for per-requirement status) · kept as the original design document
 
 ## Summary
 
