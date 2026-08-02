@@ -163,11 +163,22 @@ export const AuditEventSchema = z.object({
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
+/**
+ * host -> extension: sent once on startup so the panel can show WHERE this
+ * browser's MCP endpoint lives (ports differ per browser, E-5).
+ */
+export const HostInfoSchema = z.object({
+  kind: z.literal('hostInfo'),
+  mcpUrl: z.string().url(),
+});
+export type HostInfo = z.infer<typeof HostInfoSchema>;
+
 /** Any message crossing the native-messaging boundary. */
 export const NativeMessageSchema = z.union([
   ToolCallRequestSchema,
   ToolResultSchema,
   GrantsChangedSchema,
   AuditEventSchema,
+  HostInfoSchema,
 ]);
 export type NativeMessage = z.infer<typeof NativeMessageSchema>;

@@ -135,6 +135,10 @@ export class Bridge {
         this.log(`bridge: unexpected toolCall from extension (id '${message.id}') dropped`);
         return;
       }
+      case 'hostInfo': {
+        this.log('bridge: unexpected hostInfo from extension dropped');
+        return;
+      }
     }
   }
 

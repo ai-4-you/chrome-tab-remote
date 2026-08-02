@@ -67,9 +67,24 @@ async function main(): Promise<void> {
     port: resolveMcpPort(process.env, log),
     log,
   });
+  // Tell the extension where this browser's MCP endpoint lives (ports differ
+  // per browser) so the side panel can display it.
+  process.stdout.write(
+    encodeMessage({ kind: 'hostInfo', mcpUrl: `http://127.0.0.1:${state.httpHandle.port}/mcp` }),
+  );
 }
 
 main().catch((error: unknown) => {
-  log(`fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+  if ((error as NodeJS.ErrnoException)?.code === 'EADDRINUSE') {
+    // Classic multi-browser symptom: each browser spawns its own host, and the
+    // second one collides on the port in a reconnect loop.
+    log(
+      'fatal: MCP port already in use — most likely another browser is running its own ' +
+        'chrome-tab-remote host. Register each browser with its own port: ' +
+        'node scripts/install-native-host.mjs <id> --browser chrome|brave (or set CTR_MCP_PORT).',
+    );
+  } else {
+    log(`fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+  }
   process.exit(1);
 });

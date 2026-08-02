@@ -20,6 +20,8 @@ interface PendingGrantRequest {
 interface StateResponse {
   grants: Grant[];
   nativeStatus: 'connected' | 'disconnected';
+  /** This browser's MCP endpoint (ports differ per browser); null while disconnected. */
+  mcpUrl: string | null;
   pendingApproval: PendingApproval | null;
   pendingGrantRequest: PendingGrantRequest | null;
   /** id + title of the granted tab (null when no grant or its tab is gone). */
@@ -34,6 +36,7 @@ function $(id: string): HTMLElement {
 
 const els = {
   nativeStatus: $('native-status'),
+  mcpUrl: $('mcp-url'),
   tabTitle: $('current-tab-title'),
   tabOrigin: $('current-tab-origin'),
   tabShareStatus: $('tab-share-status'),
@@ -76,6 +79,7 @@ const els = {
 let state: StateResponse = {
   grants: [],
   nativeStatus: 'disconnected',
+  mcpUrl: null,
   pendingApproval: null,
   pendingGrantRequest: null,
   grantedTab: null,
@@ -116,6 +120,8 @@ function renderNativeStatus(): void {
   const connected = state.nativeStatus === 'connected';
   els.nativeStatus.textContent = connected ? 'connected' : 'disconnected';
   els.nativeStatus.className = `badge ${connected ? 'badge-ok' : 'badge-off'}`;
+  // Where agents connect — ports differ per browser, so show it right here.
+  els.mcpUrl.textContent = state.mcpUrl ? `MCP: ${state.mcpUrl}` : '';
 }
 
 function renderCurrentTab(): void {

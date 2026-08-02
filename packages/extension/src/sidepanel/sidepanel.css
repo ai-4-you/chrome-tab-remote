@@ -268,3 +268,10 @@ h2 {
 #request-section.request-act {
   border: 1px solid var(--danger);
 }
+
+.mcp-url {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 2px 0 8px;
+  user-select: all;
+}

@@ -51,6 +51,19 @@ npm run build
    ```
 3. Reload the extension once (↻ on the card).
 
+**Multiple browsers?** Each browser runs its own helper on its own port. The installer writes one browser-*detecting* launcher (it identifies the spawning browser at runtime — necessary because Brave resolves hosts through Chrome's registration); register each browser's manifest once:
+
+```bash
+node packages/host/scripts/install-native-host.mjs <extension-id> --browser brave
+```
+
+| Browser | MCP endpoint | Audit dir |
+|---|---|---|
+| Chrome | `http://127.0.0.1:8917/mcp` | `~/.chrome-tab-remote/` |
+| Brave | `http://127.0.0.1:8918/mcp` | `~/.chrome-tab-remote-brave/` |
+
+Grants, approvals, and audit stay fully separate per browser; an agent picks the browser by picking the port — and each panel shows its own endpoint under the header.
+
 ### 2. Grant a tab
 
 1. Open any normal website and click the **Chrome Tab Remote** toolbar icon — the side panel opens.

@@ -5,6 +5,7 @@ import {
   ERROR_CODES,
   ErrorCodeSchema,
   GrantsChangedSchema,
+  HostInfoSchema,
   NativeMessageSchema,
   TOOL_NAMES,
   ToolCallRequestSchema,
@@ -156,6 +157,13 @@ describe('AuditEntrySchema / AuditEventSchema', () => {
 
   it('accepts a minimal lifecycle entry', () => {
     expect(AuditEntrySchema.safeParse({ ts: 1, type: 'grant_revoked' }).success).toBe(true);
+  });
+
+  it('accepts hostInfo announcements with a valid MCP url', () => {
+    const msg = { kind: 'hostInfo', mcpUrl: 'http://127.0.0.1:8918/mcp' };
+    expect(HostInfoSchema.safeParse(msg).success).toBe(true);
+    expect(NativeMessageSchema.safeParse(msg).success).toBe(true);
+    expect(HostInfoSchema.safeParse({ kind: 'hostInfo', mcpUrl: 'not-a-url' }).success).toBe(false);
   });
 
   it('accepts an optional tabId (per-tab audit view) and rejects invalid ones', () => {

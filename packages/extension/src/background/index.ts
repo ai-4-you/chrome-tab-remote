@@ -8,7 +8,7 @@
 // host_permissions — the side panel requests the granted origin at runtime
 // (optional_host_permissions) and teardown paths drop it again.
 import type { Grant, GrantMode } from '@ctr/shared';
-import { originOf, ToolCallRequestSchema } from '@ctr/shared';
+import { HostInfoSchema, originOf, ToolCallRequestSchema } from '@ctr/shared';
 import { decideApproval, getPendingApproval, setApprovalNotifier } from './approvals.js';
 import {
   dismissGrantRequest,
@@ -95,8 +95,17 @@ async function broadcastGrants(): Promise<void> {
   notifySidePanel();
 }
 
+/** This browser's MCP endpoint, announced by the host on startup (ports differ per browser). */
+let hostMcpUrl: string | null = null;
+
 connectNativeHost({
   onMessage: (raw) => {
+    const info = HostInfoSchema.safeParse(raw);
+    if (info.success) {
+      hostMcpUrl = info.data.mcpUrl;
+      notifySidePanel();
+      return;
+    }
     const parsed = ToolCallRequestSchema.safeParse(raw);
     if (!parsed.success) return;
     void handleToolCall(parsed.data).then((result) => {
@@ -109,6 +118,7 @@ connectNativeHost({
   },
   onStatusChange: (status) => {
     if (status === 'disconnected') {
+      hostMcpUrl = null;
       void appendAudit({ type: 'native_disconnected' });
     }
     notifySidePanel();
@@ -279,6 +289,7 @@ chrome.runtime.onMessage.addListener(
           sendResponse({
             grants,
             nativeStatus: getNativeStatus(),
+            mcpUrl: hostMcpUrl,
             pendingApproval: getPendingApproval(),
             pendingGrantRequest: getPendingGrantRequest(),
             grantedTab,
