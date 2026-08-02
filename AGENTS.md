@@ -6,6 +6,10 @@ Durable collaboration memory for this repository. Read `PROJECT_OVERVIEW.md` fir
 
 A **trust-first Chrome extension** (plus backend communication) that lets a user explicitly select **one tab** which a backend/agentic system may then inspect and control. Security and corporate adoptability are the product's core differentiator, not an afterthought. North star: `IDEA.md`.
 
+## Collaboration rules (durable)
+
+- **2026-08-02:** Git commits must NOT carry a `Co-Authored-By: Claude …` trailer (user decision; overrides the default).
+
 ## Scope decisions (durable)
 
 - **2026-08-02:** Focus is the Chrome extension and its communication with a backend system only. The knowledge-gathering/RAG side of the reference system chrome-tracker is explicitly **out of scope**.
