@@ -150,3 +150,5 @@ Everything above is implemented and verified live against real browsers (Chrome 
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.
+
+[MIT licensed](./LICENSE).
