@@ -71,7 +71,7 @@ function install(extensionId) {
 
   const manifest = {
     name: HOST_NAME,
-    description: 'chrome-tab-remote native messaging host (observe-only MCP bridge)',
+    description: 'chrome-tab-remote native messaging host (MCP bridge: observe + user-approved actions)',
     path: launcherPath,
     type: 'stdio',
     allowed_origins: [`chrome-extension://${extensionId}/`],

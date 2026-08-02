@@ -174,7 +174,7 @@ const GRANT_ID_INPUT = z
       'Pass an explicit grantId (from list_grants) only to assert you mean that specific grant.',
   );
 
-/** Build one McpServer instance exposing the observe-only Stage 1 tools. */
+/** Build one McpServer instance exposing the observe (Stage 1) and act (Stage 2) tools. */
 export function createMcpServer(bridge: ToolBridge): McpServer {
   const server = new McpServer({ name: 'chrome-tab-remote', version: '0.1.0' });
   const handlers = createToolHandlers(bridge);
@@ -184,8 +184,9 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     {
       description:
         'List the Tab Grants the user has currently issued in the Chrome side panel (at most ' +
-        'one). chrome-tab-remote is observe-only and strictly consent-based: a grant ' +
-        'authorizes read access to exactly one tab, is pinned to that tab’s website, expires ' +
+        'one). chrome-tab-remote is strictly consent-based: a grant authorizes access to ' +
+        'exactly one tab (observe = read-only; act additionally allows user-approved ' +
+        'actions), is pinned to that tab’s website, expires ' +
         'after 30 minutes, and the user can revoke it at any time. Without an active grant ' +
         'no tab can be observed — errors tell you what to ask the user to do. You do NOT ' +
         'need to call this before tab_snapshot/tab_read: those default to the single active ' +

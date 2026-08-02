@@ -399,13 +399,13 @@ describe('router', () => {
       expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('reports busy as approval_timeout while another approval is pending', async () => {
+    it('reports busy (dedicated code) while another approval is pending', async () => {
       await mintActGrant();
       mock.tabs.sendMessage.mockResolvedValue({ ok: true, result: { target: 'button "Save"' } });
       const first = handleToolCall(call('tab_click', { ref: 'n7' }));
       await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
       const second = await handleToolCall(call('tab_click', { ref: 'n8' }));
-      expectError(second, 'approval_timeout');
+      expectError(second, 'busy');
       decideApproval(getPendingApproval()!.opId, false);
       await first;
     });

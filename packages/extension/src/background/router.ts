@@ -145,7 +145,7 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
       return { res: okResult(req.id, { grants: await listGrants() }) };
     }
     if (outcome === 'busy') {
-      return { res: errResult(req.id, 'no_grant', 'An access request is already pending — wait for it to resolve.') };
+      return { res: errResult(req.id, 'busy', 'An access request is already pending.') };
     }
     await appendAudit({ type: 'grant_request_dismissed', detail: outcome });
     return {
@@ -329,11 +329,7 @@ async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolRes
     await appendAudit({ type: 'action_proposed', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });
     const decision = await proposeApproval({ opId, steps: approvalSteps, origin: grant.origin });
     if (decision === 'busy') {
-      return errResult(
-        req.id,
-        'approval_timeout',
-        "Another action is already awaiting the user's decision — retry after it resolves.",
-      );
+      return errResult(req.id, 'busy', "Another action is already awaiting the user's decision.");
     }
     if (decision === 'denied') {
       await appendAudit({ type: 'action_denied', grantId: grant.grantId, tabId: grant.tabId, tool: req.tool, detail: proposedDetail });

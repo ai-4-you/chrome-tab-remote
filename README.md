@@ -124,7 +124,7 @@ If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 222 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
+Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fill/select behind the per-action approval gate) implemented 2026-08-02 — 230 unit tests. The full requirements list with per-requirement status lives in [REQUIREMENTS.md](./REQUIREMENTS.md). Honest gaps:
 
 - The local MCP endpoint has **no authentication** — other processes on *your own machine* could reach it while a grant is active (though actions still require your approval click). Deliberate decision for the fully-local deployment; localhost-only + DNS-rebinding protection are in place.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
@@ -133,7 +133,7 @@ Stage 1 (observe) verified end-to-end against a real tab; Stage 2 (act: click/fi
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 222 tests + dependency audit
+./precommit.sh   # typecheck + lint + 230 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

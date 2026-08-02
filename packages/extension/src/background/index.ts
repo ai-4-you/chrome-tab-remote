@@ -8,7 +8,7 @@
 // host_permissions — the side panel requests the granted origin at runtime
 // (optional_host_permissions) and teardown paths drop it again.
 import type { Grant, GrantMode } from '@ctr/shared';
-import { ToolCallRequestSchema } from '@ctr/shared';
+import { originOf, ToolCallRequestSchema } from '@ctr/shared';
 import { decideApproval, getPendingApproval, setApprovalNotifier } from './approvals.js';
 import {
   dismissGrantRequest,
@@ -121,15 +121,6 @@ async function injectContentScript(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
 }
 
-function originOf(url: string | undefined): string | null {
-  if (!url || !/^https?:/i.test(url)) return null;
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
-
 export type SidePanelResult =
   | { ok: true; grant?: Grant }
   | { ok: false; error: string };
@@ -208,6 +199,11 @@ async function reconfirmByUser(grantId: string, expectedOrigin: string): Promise
   return { ok: true, grant: updated };
 }
 
+/** Async SW event work must never fail silently — log it (visible in the SW console). */
+function logListenerError(context: string): (error: unknown) => void {
+  return (error) => console.error(`[chrome-tab-remote] ${context}:`, error);
+}
+
 // Origin pin: navigation to a different origin suspends the grant.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   const url = changeInfo.url;
@@ -231,7 +227,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       detail: `navigated to ${origin || 'unknown origin'}`,
     });
     await broadcastGrants();
-  })();
+  })().catch(logListenerError('tabs.onUpdated origin pin'));
 });
 
 // Tab close revokes.
@@ -243,7 +239,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
       await appendAudit({ type: 'grant_revoked', grantId: grant.grantId, tabId, detail: 'tab closed' });
     }
     if (removed.length > 0) await broadcastGrants();
-  })();
+  })().catch(logListenerError('tabs.onRemoved revoke'));
 });
 
 // --- Side panel API --------------------------------------------------------

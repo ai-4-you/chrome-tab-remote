@@ -2,6 +2,7 @@
 // Talks to the background via chrome.runtime messages; listens for
 // 'ctrStateChanged' pushes and keeps a 1s tick for the expiry countdown.
 import type { AuditEntry, Grant } from '@ctr/shared';
+import { originOf } from '@ctr/shared';
 
 interface PendingApproval {
   opId: string;
@@ -87,15 +88,6 @@ let currentTab: chrome.tabs.Tab | null = null;
  * `expectedOrigin` so the background can reject if it changed after render.
  */
 let pendingOrigin: string | null = null;
-
-function originOf(url: string | undefined): string | null {
-  if (!url || !/^https?:/i.test(url)) return null;
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
 
 function activeGrant(): Grant | undefined {
   return state.grants[0];
@@ -286,6 +278,17 @@ function renderAudit(entries: AuditEntry[]): void {
 }
 
 async function refresh(): Promise<void> {
+  try {
+    await refreshUnsafe();
+  } catch (error) {
+    // The background SW may be restarting mid-push; keep the last rendered
+    // state instead of dying on an unhandled rejection. The next push or tick
+    // will refresh again.
+    console.warn('[chrome-tab-remote] panel refresh failed (SW restarting?):', error);
+  }
+}
+
+async function refreshUnsafe(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tab ?? null;
   state = (await chrome.runtime.sendMessage({ type: 'ctrGetState' })) as StateResponse;

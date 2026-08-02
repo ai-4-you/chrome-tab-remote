@@ -12,6 +12,7 @@ export const ERROR_CODES = [
   'observe_only',
   'approval_denied',
   'approval_timeout',
+  'busy',
   'tab_unreachable',
   'timeout',
 ] as const;
@@ -61,6 +62,9 @@ export const ERROR_RECOVERY: Record<ErrorCode, string> = {
   approval_timeout:
     'The approval request expired without a user decision. Ask the user to keep the side ' +
     'panel open and watch for the approval card, then retry if the action is still wanted.',
+  busy:
+    'Another request is already awaiting the user in the side panel. Wait a few seconds ' +
+    'for it to resolve, then retry.',
   tab_unreachable:
     'The granted tab did not respond. Ask the user to check the tab is still open and ' +
     'fully loaded (reload if needed), then retry.',

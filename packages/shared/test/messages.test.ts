@@ -49,6 +49,7 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'observe_only',
       'approval_denied',
       'approval_timeout',
+      'busy',
       'tab_unreachable',
       'timeout',
     ]);

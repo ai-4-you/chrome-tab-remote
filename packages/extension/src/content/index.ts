@@ -1,7 +1,8 @@
 // Content script — injected programmatically (chrome.scripting.executeScript)
 // into the ONE granted tab. Bundled as IIFE. Guards against double injection
 // (re-confirm re-injects into the same tab).
-import type { PlanStep, SnapshotNode } from '@ctr/shared';
+import type { PlanStep } from '@ctr/shared';
+import { findNodes } from '@ctr/shared';
 import { executePlan } from './actions.js';
 import { waitForQuiet } from './settle.js';
 import { captureSnapshot, classifyMissingRef, describeElement, readRef } from './snapshot.js';
@@ -143,25 +144,10 @@ if (!window.__ctrContentInjected) {
           lastRefMap = capture.refMap;
           refBase = nextStart;
           nextStart = capture.nextStart;
-          const flat: SnapshotNode[] = [];
-          (function walk(node: SnapshotNode): void {
-            flat.push(node);
-            for (const child of node.children ?? []) walk(child);
-          })(capture.result.tree);
-          const matching = flat.filter(
-            (node) =>
-              (!role || node.role === role) &&
-              (query === '' ||
-                `${node.name} ${node.value ?? ''} ${node.href ?? ''}`.toLowerCase().includes(query)),
-          );
+          const { matches, total } = findNodes(capture.result.tree, query, role);
           sendResponse({
             ok: true,
-            result: {
-              url: capture.result.url,
-              title: capture.result.title,
-              total: matching.length,
-              matches: matching.slice(0, 30).map(({ children: _children, ...rest }) => rest),
-            },
+            result: { url: capture.result.url, title: capture.result.title, total, matches },
           });
         } catch (e) {
           sendResponse({ ok: false, error: { code: 'tab_unreachable', message: `Find failed: ${String(e)}` } });
