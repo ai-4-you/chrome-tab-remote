@@ -112,11 +112,45 @@ describe('captureSnapshot', () => {
     expect(flatten(result.tree)).toHaveLength(SNAPSHOT_MAX_NODES);
   });
 
-  it('truncates names to SNAPSHOT_NAME_MAX_CHARS in the snapshot', () => {
+  it('truncates names to SNAPSHOT_NAME_MAX_CHARS with a visible … marker', () => {
     const long = 'x'.repeat(500);
-    document.body.innerHTML = `<h1>${long}</h1>`;
+    document.body.innerHTML = `<h1>${long}</h1><h2>short</h2>`;
     const { result } = captureSnapshot(document);
-    expect(findByRole(result.tree, 'heading')[0]?.name).toHaveLength(SNAPSHOT_NAME_MAX_CHARS);
+    const [h1, h2] = findByRole(result.tree, 'heading');
+    // Capped names end in … so an agent knows to tab_read the ref for full text.
+    expect(h1?.name).toHaveLength(SNAPSHOT_NAME_MAX_CHARS);
+    expect(h1?.name.endsWith('…')).toBe(true);
+    // Complete names carry no marker.
+    expect(h2?.name).toBe('short');
+  });
+
+  it('marks truncated hrefs with … so an agent never treats them as complete URLs', () => {
+    document.body.innerHTML = `<a href="https://example.com/${'x'.repeat(500)}">Long</a>`;
+    const { result } = captureSnapshot(document);
+    const href = findByRole(result.tree, 'link')[0]?.href;
+    expect(href).toHaveLength(SNAPSHOT_HREF_MAX_CHARS);
+    expect(href?.endsWith('…')).toBe(true);
+  });
+
+  it('falls back to placeholder, inner img alt, and title when primary naming is empty', () => {
+    document.body.innerHTML = `
+      <input type="text" placeholder="Suchen" />
+      <a href="/home"><img src="logo.png" alt="Firmenlogo" /></a>
+      <a href="/help" title="Hilfe öffnen"></a>
+      <a href="/plain"></a>
+    `;
+    const { result } = captureSnapshot(document);
+    expect(findByRole(result.tree, 'textbox')[0]?.name).toBe('Suchen');
+    const links = findByRole(result.tree, 'link');
+    expect(links[0]?.name).toBe('Firmenlogo');
+    expect(links[1]?.name).toBe('Hilfe öffnen');
+    expect(links[2]?.name).toBe('');
+  });
+
+  it('prefers visible text over the fallbacks', () => {
+    document.body.innerHTML = '<a href="/x" title="ignored">Visible text</a>';
+    const { result } = captureSnapshot(document);
+    expect(findByRole(result.tree, 'link')[0]?.name).toBe('Visible text');
   });
 
   it('includes absolute http(s) hrefs on link nodes, omitting other schemes', () => {
@@ -132,12 +166,6 @@ describe('captureSnapshot', () => {
     expect(links.find((l) => l.name === 'External')?.href).toBe('https://other.example.com/x');
     expect(links.find((l) => l.name === 'JS')?.href).toBeUndefined();
     expect(links.find((l) => l.name === 'Mail')?.href).toBeUndefined();
-  });
-
-  it('caps hrefs at SNAPSHOT_HREF_MAX_CHARS', () => {
-    document.body.innerHTML = `<a href="https://example.com/${'x'.repeat(500)}">Long</a>`;
-    const { result } = captureSnapshot(document);
-    expect(findByRole(result.tree, 'link')[0]?.href).toHaveLength(SNAPSHOT_HREF_MAX_CHARS);
   });
 
   it("filter 'interactive' keeps controls and headings, drops text runs and structure", () => {

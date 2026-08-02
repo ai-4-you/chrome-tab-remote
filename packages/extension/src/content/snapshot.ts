@@ -81,9 +81,13 @@ function collapse(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Cap a name at SNAPSHOT_NAME_MAX_CHARS with a trailing … — the marker tells
+ * an agent the name is incomplete and tab_read on the ref returns the rest.
+ */
 function truncateName(text: string): string {
   return text.length > SNAPSHOT_NAME_MAX_CHARS
-    ? text.slice(0, SNAPSHOT_NAME_MAX_CHARS)
+    ? `${text.slice(0, SNAPSHOT_NAME_MAX_CHARS - 1)}…`
     : text;
 }
 
@@ -150,7 +154,13 @@ function computeRole(el: Element): string | null {
   }
 }
 
-/** aria-label > aria-labelledby > alt > label[for] > (leaf roles only) text content. */
+/**
+ * aria-label > aria-labelledby > alt > label[for] > (leaf roles only) text
+ * content > placeholder > inner img alt > title. The last three are fallbacks
+ * so common nameless-but-interactive elements (placeholder-only inputs, logo
+ * links wrapping an image, icon links with a tooltip) still tell an agent what
+ * they are.
+ */
 function computeName(el: Element, doc: Document, role: string): string {
   const ariaLabel = el.getAttribute('aria-label');
   if (ariaLabel && ariaLabel.trim()) return truncateName(collapse(ariaLabel));
@@ -174,8 +184,19 @@ function computeName(el: Element, doc: Document, role: string): string {
   }
 
   if (LEAF_ROLES.has(role)) {
-    return truncateName(collapse(el.textContent ?? ''));
+    const text = collapse(el.textContent ?? '');
+    if (text) return truncateName(text);
   }
+
+  const placeholder = el.getAttribute('placeholder');
+  if (placeholder && placeholder.trim()) return truncateName(collapse(placeholder));
+
+  const innerImgAlt = el.querySelector('img[alt]')?.getAttribute('alt');
+  if (innerImgAlt && innerImgAlt.trim()) return truncateName(collapse(innerImgAlt));
+
+  const title = el.getAttribute('title');
+  if (title && title.trim()) return truncateName(collapse(title));
+
   return '';
 }
 
@@ -198,12 +219,18 @@ function computeValue(el: Element): string | undefined {
   return undefined;
 }
 
-/** Absolute http(s) href for link nodes; other schemes (javascript:, mailto:, …) are omitted. */
+/**
+ * Absolute http(s) href for link nodes; other schemes (javascript:, mailto:, …)
+ * are omitted. Over-long hrefs are cut with a trailing … so an agent never
+ * mistakes a truncated URL for a complete one.
+ */
 function computeHref(el: Element): string | undefined {
   const href = (el as HTMLAnchorElement).href;
   if (typeof href !== 'string') return undefined;
   if (!href.startsWith('http://') && !href.startsWith('https://')) return undefined;
-  return href.length > SNAPSHOT_HREF_MAX_CHARS ? href.slice(0, SNAPSHOT_HREF_MAX_CHARS) : href;
+  return href.length > SNAPSHOT_HREF_MAX_CHARS
+    ? `${href.slice(0, SNAPSHOT_HREF_MAX_CHARS - 1)}…`
+    : href;
 }
 
 /** Allocate the next ref, or null when the node cap is reached (sets truncated). */

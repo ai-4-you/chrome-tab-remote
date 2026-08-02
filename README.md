@@ -92,7 +92,7 @@ If any of those don't hold, that's a bug — please report it.
 
 ## Current status & known gaps
 
-Stage 1 (observe-only) — implemented, unit-tested (146 tests) and verified end-to-end against a real tab on 2026-08-02. Honest gaps, tracked in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md):
+Stage 1 (observe-only) — implemented, unit-tested (148 tests) and verified end-to-end against a real tab on 2026-08-02. Honest gaps, tracked in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md):
 
 - The local MCP endpoint has **no authentication yet** — other processes on *your own machine* could read the granted tab while a grant is active. Localhost-only + DNS-rebinding protection are in place; token auth is the first item of the next stage.
 - Helper must run from this repo (no packaged binary yet); installer is macOS-only.
@@ -101,7 +101,7 @@ Stage 1 (observe-only) — implemented, unit-tested (146 tests) and verified end
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 146 tests + dependency audit
+./precommit.sh   # typecheck + lint + 148 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

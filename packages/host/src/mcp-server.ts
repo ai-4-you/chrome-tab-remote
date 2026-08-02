@@ -135,7 +135,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
         'snapshot again. Use filter "interactive" first on large pages (controls and ' +
         'headings only, far fewer tokens), then "full" (default) when you need the text ' +
         'content. Observe-only: never modifies the page; password values always read ' +
-        '[redacted]. Long names are truncated at 120 chars — tab_read returns full text.',
+        '[redacted]. Names and URLs ending in … are truncated — tab_read the ref for ' +
+        'full text; never treat an …-terminated URL as complete.',
       inputSchema: {
         grantId: GRANT_ID_INPUT,
         filter: z

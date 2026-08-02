@@ -74,6 +74,8 @@ The agent never sees raw DOM or screenshots. The content script produces a struc
 
 **Later candidates (ranked, not yet built):** `tab_find(query, role?)` returning matching refs; snapshot ids + `stale_ref` errors instead of silently serving old refs; subtree scoping (`tab_snapshot(scope: ref)`); `wait_for` and snapshot diffs once actions exist.
 
+**Stage 2 prerequisite:** `combobox` is a leaf role, so `<select>` options are invisible in snapshots. Expose the option list (values + labels) before implementing `select(ref, value)` — an agent cannot choose a value it cannot see.
+
 ### 2.3 Action vocabulary — small, deterministic, BiDi-aligned
 
 Actions target **node refs from the latest snapshot**, not free-form CSS selectors invented by an LLM:
