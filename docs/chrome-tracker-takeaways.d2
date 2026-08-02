@@ -1,0 +1,26 @@
+direction: down
+
+title: |md
+  # chrome-tracker: extension <-> backend primitives
+| {near: top-center}
+
+ext: Chrome Extension (MV3) {
+  content: content.js\n(capture + executeOperation)
+  bg: background.js\n(service worker, IndexedDB)
+  panel: chrome-chat side panel
+}
+
+ks: Backend (knowledge-server :3000) {
+  style.fill: "#eef6ff"
+  ingest: "POST / (event ingest)"
+  ops: "GET /operations (file-backed)"
+  chat: "POST /chrome-chat/ask"
+}
+
+ext.content -> ext.bg: page content,\nuser actions
+ext.bg -> ks.ingest: upload events\n(retry until sent, opt-in)
+
+ks.ops -> ext.bg: poll ~6s\n(opt-in, off by default)
+ext.bg -> ext.content: executeOperation\n(navigate, click, type, clipboard)
+
+ext.panel -> ks.chat: question + page context
