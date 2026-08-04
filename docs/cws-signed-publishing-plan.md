@@ -30,7 +30,7 @@ The extension is functionally mature, but the release path is not ready.
 | Privacy | No public policy URL or finalized dashboard disclosures | **Blocking** |
 | Listing assets | 128×128 icon exists; its artwork padding is unverified. Existing screenshot is 1322×1630, not an accepted Store screenshot size. Required 440×280 promo image is absent | **Blocking** |
 | Signing | Verified CRX Uploads selected for future updates; private-key custody is undecided | Post-first-publication gate |
-| Planning state | `docs/cws-*` analysis is untracked and contains several stale or weak claims | Reconcile before execution |
+| Planning state | Canonical plan and reconciled CWS companion documents are committed in `6acc21d` and `39d7f29`; no publication implementation has started | Stage 0 complete |
 
 ## Fixed principles and corrected assumptions
 
@@ -153,7 +153,7 @@ The private key never enters the repository, chat, logs, screenshots, or ordinar
 
 Each stage has an entry condition, ordered work, a completion gate, evidence, risks, and recovery. A stage is not complete because work was attempted; its gate must be satisfied.
 
-### Stage 0 — Canonicalize the release contract
+### Stage 0 — Canonicalize the release contract — **complete 2026-08-04**
 
 **Entry:** Current repository and existing CWS analysis are available.
 

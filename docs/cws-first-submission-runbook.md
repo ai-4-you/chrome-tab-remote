@@ -17,16 +17,16 @@ The remaining work is explicit in the canonical plan; none of it should be treat
 
 ![First submission runbook](./cws-first-submission-runbook.svg)
 
-## The one risk that actually matters
+## Primary project-specific rejection risk
 
-Google's most common first-submission rejection is broken functionality — *Yellow Magnesium* — and the guidance is explicit: "Test the exact files that you submit to the web store, not just a local development version."
+Broken functionality is a documented Chrome Web Store violation category (*Yellow Magnesium*). Google’s troubleshooting guidance says to test the exact files submitted to the Store rather than only a separate local development build. For this project, the external native-helper dependency makes reviewer-visible non-functionality the primary identified submission risk.
 
 A reviewer on a clean machine has no native host. Today the side panel would let them create a grant and then nothing would happen. That reads as broken.
 
 Three mitigations, in order of value:
 
 1. **Detect the missing host and say so.** When `chrome.runtime.connectNative` disconnects with `chrome.runtime.lastError`, the side panel should show a plain "Native helper not installed" state with a link to setup instructions — not silence. This is good product behaviour for real users too, not just reviewers.
-2. **A screencast.** Unlisted YouTube or Drive link in the reviewer notes: one continuous unedited take on a fresh profile — install the host, load the extension, create a grant, trigger an action, show the approval prompt. Keeping Activity Monitor visible so the host process is seen starting and exiting is a strong credibility signal.
+2. **A screencast.** Unlisted YouTube or Drive link in the reviewer notes: one continuous unedited take on a fresh profile — install the host, load the extension, create a grant, trigger an action, show the approval prompt. As project-prepared evidence—not a Google requirement—the recording may also show the helper process starting and exiting without exposing unrelated processes or private data.
 3. **Written reviewer notes** (template below).
 
 Unverified but cheap to test: practitioner advice suggests moving `nativeMessaging` into `optional_permissions` so the base extension reviews faster, with the deep review only on opt-in. Chrome's docs do not state whether `nativeMessaging` is permitted as an optional permission. Load an unpacked build with it moved and see whether Chrome warns at load time — 10 minutes to answer, and it changes the review profile if it works.
@@ -157,7 +157,7 @@ Sequence that avoids it: upload the ZIP as an unpublished draft → **Package �
 11. Permission justifications; declare no remote code.
 12. Reviewer notes + screencast.
 
-**E. Submit** — then expect days to weeks. Rejection is not a penalty; there is no cooldown and you may resubmit as often as needed.
+**E. Submit** — then plan for days to a few weeks, without treating that range as a commitment. If rejected, use Google’s notice and official troubleshooting guidance to make a concrete correction, regenerate the evidence, and resubmit.
 
 **F. After approval**
 13. Opt into Verified CRX Uploads (D1) — all later updates become signed CRX uploads.

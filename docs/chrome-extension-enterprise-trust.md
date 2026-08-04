@@ -6,21 +6,22 @@
 
 ## Conclusion
 
-The strongest trust path for Chrome Tab Remote is:
+The selected v1 distribution path is:
 
 ```text
-Company-controlled source and build
+Company-controlled source and deterministic package
         ↓
-Chrome Web Store publisher account
+Chrome Web Store publisher account + initial ZIP review
         ↓
-Verified CRX Uploads + Chrome Web Store review
-        ↓
-Private/domain publication or approved organization publication
-        ↓
-Chrome Enterprise allowlist/force-install policy
-        ↓
-Separately signed native-host deployment
+Public Chrome Web Store listing
+        ├── individual installation
+        └── managed allowlist/force-install by Store ID
+
+After initial approval: Verified CRX Uploads protects future uploads.
+Separate trust boundary: the native host needs its own signed deployment path.
 ```
+
+Private/domain or approved-organization publication remains an optional enterprise-specific alternative, not the project’s selected v1 route.
 
 A Chrome Web Store listing is useful evidence of controlled distribution and policy review, but it is not a complete enterprise security certification. The organization must review the extension's permissions, data flows, native host, update process, and operational controls itself.
 
@@ -130,7 +131,7 @@ Existing choices that align well with enterprise review:
 - One-tab capability grants with expiry and revocation.
 - Explicit approval for consequential actions.
 - Local append-only audit log.
-- No cloud service, tracking, or embedded AI.
+- No tracking, embedded AI, or project-operated cloud service. Granted data crosses the localhost helper/MCP boundary; the user-selected MCP client may use an external service under its own configuration and terms.
 - Local MCP endpoint bound to loopback with DNS-rebinding protection.
 
 Current enterprise-readiness gaps:

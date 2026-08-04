@@ -78,7 +78,7 @@ Not affected — these are internal identifiers, never shown in the store, and c
 
 ### B2 — No privacy policy
 
-Required whenever an extension handles user data. The listing needs a public URL plus data-handling disclosures and the limited-use certification. Content must cover: page content read under a grant, tab URLs, the local audit log, and the fact that nothing leaves the machine.
+Required whenever an extension handles user data. The listing needs a public URL plus data-handling disclosures and the limited-use certification. Content must cover page content read under a grant, tab URLs, the local audit log, transfer to the localhost companion helper, and exposure through its localhost MCP endpoint. The extension/helper do not contact a project-operated cloud service; a user-selected MCP client or AI service may process or transmit tool results under its own configuration and terms.
 
 ### B3 — Reviewers cannot exercise the extension
 
