@@ -25,7 +25,7 @@ Broken functionality is a documented Chrome Web Store violation category (*Yello
 
 Three mitigations, in order of value:
 
-1. **Detect the missing host and say so.** When `chrome.runtime.connectNative` disconnects with `chrome.runtime.lastError`, the side panel should show a plain "Native helper not installed" state with a link to setup instructions — not silence. This is good product behaviour for real users too, not just reviewers.
+1. **Detect helper unavailability and explain it.** When `chrome.runtime.connectNative` disconnects, the side panel should show **"Native helper unavailable"**, explain that it may be not installed, crashed, or misconfigured, and link to setup/troubleshooting instructions. Say "not installed" only when diagnostics establish that cause.
 2. **A screencast.** Unlisted YouTube or Drive link in the reviewer notes: one continuous unedited take on a fresh profile — install the host, load the extension, create a grant, trigger an action, show the approval prompt. As project-prepared evidence—not a Google requirement—the recording may also show the helper process starting and exiting without exposing unrelated processes or private data.
 3. **Written reviewer notes** (template below).
 
@@ -55,9 +55,10 @@ HOW TO TEST
 5. Trigger an action; the side panel asks for per-action approval.
 6. Click "Revoke" — access ends immediately.
 
-WITHOUT THE HOST INSTALLED
-The side panel shows a "Native helper not installed" state with setup
-instructions. This is expected, not a failure.
+WHEN THE HELPER IS UNAVAILABLE
+The side panel explains that the helper may be absent, stopped, or
+misconfigured and links to setup/troubleshooting steps. The extension does
+not silently pretend the agent connection works.
 
 SCREENCAST
 <unlisted video link> — unedited, fresh profile, full install-to-action flow.
@@ -141,7 +142,7 @@ Google's [`manifest.key` guidance](https://developer.chrome.com/docs/extensions/
 1. Confirm the working Store name, then rename manifest, notifications, and agent-facing strings.
 2. Add 16/32/48 icons; verify 128 padding; prepare screenshots and required promo image.
 3. Establish one version source plus deterministic bootstrap/final packaging and verification commands.
-4. Add the clear missing-helper state and public reviewer-helper path.
+4. Add the accurate **Native helper unavailable** state and public reviewer-helper setup/troubleshooting path.
 5. Build and verify an identity-bootstrap ZIP at `V_bootstrap`; label it non-release.
 
 **B. Account — H1**

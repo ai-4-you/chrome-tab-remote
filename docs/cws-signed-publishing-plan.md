@@ -58,7 +58,7 @@ The extension is functionally mature, but the release path is not ready.
 4. **Review time is not a commitment.** Google's [review-process guidance](https://developer.chrome.com/docs/webstore/review-process) says most reviews complete within a few days but some take up to a few weeks, and lists new developers/extensions, dangerous permissions, broad host patterns, and hard-to-review code as closer-review signals. Use “days to a few weeks” only as a planning buffer.
 5. **The 440×280 promotional image is required.** Google's [image requirements](https://developer.chrome.com/docs/webstore/images) require the 128×128 icon, a small 440×280 promotional image, and at least one 1280×800 or 640×400 screenshot.
 6. **Local bridge does not mean guaranteed local downstream processing.** The extension communicates with the local native helper and does not itself embed an AI or vendor cloud service. The user-selected MCP client may forward tool results to an external model. Listing and privacy text must describe this boundary and must not promise that data can never leave the machine.
-7. **No reviewer tricks.** A screencast and detailed notes explain setup; they do not replace a comprehensible missing-helper state and a reproducible helper-install path.
+7. **No reviewer tricks.** A screencast and detailed notes explain setup; they do not replace an accurate **Native helper unavailable** state and a reproducible helper setup/troubleshooting path.
 8. **Bootstrap is not submission.** The first ZIP exists only to create the dashboard item and retrieve its public key. Adding that key changes the package, so the final candidate uses a strictly higher version, is rehearsed, and is explicitly uploaded with **Upload New Package** before review.
 9. **Publication is deliberately deferred.** H2a disables automatic publication. Approval creates a staged/ready-to-publish state; H2b manually publishes after a final check and before the dashboard expiry (currently up to 30 days per Google's [update guidance](https://developer.chrome.com/docs/webstore/update/)).
 10. **Verified Uploads opt-in is human-only.** Treat it as irreversible, require the human to read/capture the live dashboard warning, and never automate the opt-in click. Public docs verify the future-signing requirement but do not clearly document a disable path.
@@ -123,7 +123,7 @@ The human verifies the staged version/listing once more and manually publishes i
 
 ### Human batch H3 — signed future uploads
 
-Target: 15–20 focused minutes after initial approval and key-custody preparation.
+Target: 15–20 focused minutes only after H2b has manually published the initial item and key-custody preparation is complete.
 
 The human:
 
@@ -223,7 +223,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 **Ordered work:**
 
 1. Rename user-visible surfaces to **AI Tab Grant** while preserving internal native-host and storage identifiers.
-2. Add a tested native-helper state that says the helper is unavailable/not installed, explains the consequence, links to public setup instructions, and offers retry/status information. Do not infer “not installed” when the error could also be a crash; wording must cover both.
+2. Add a tested **Native helper unavailable** state that explains possible causes (not installed, crashed, or misconfigured), the consequence, public setup/troubleshooting links, and retry/status information. State “not installed” only when diagnostics establish it.
 3. Re-audit every permission against code. Keep only what the single purpose requires. Record precise dashboard justifications.
 4. Add 16/32/48 icons and `action.default_icon`; verify the 128×128 Store icon’s transparent padding and light/dark contrast.
 5. Decide and build the minimum credible reviewer helper kit:
@@ -273,7 +273,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
    - required 440×280 small promotional image;
    - 1–5 full-bleed screenshots at exactly 1280×800 or 640×400;
    - optional 1400×560 marquee only if featuring is desired.
-5. Prepare reviewer notes with helper download, checksum, supported OS, exact install/test steps, expected missing-helper state, source link, and screencast link.
+5. Prepare reviewer notes with helper download, checksum, supported OS, exact install/test steps, expected helper-unavailable state, source link, and screencast link.
 6. Record one continuous clean-profile screencast without private tabs, credentials, tokens, file paths, or signing material.
 
 **Automation:** Generate copy from a checked-in source-of-truth template; validate character counts, URLs, image dimensions, required fields, and permission parity; generate reviewer checklist and checksums.
@@ -323,7 +323,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 
 1. Place exactly one candidate ZIP in the generated H2 handoff folder; record its filename, absolute handoff path, version, SHA-256, source commit, and build command in the release report.
 2. Use a fresh Chrome profile and install the unpacked contents of that ZIP; confirm displayed Store ID and `V_final`.
-3. Verify missing-helper guidance first.
+3. Verify helper-unavailable guidance first, including absence, crash, and misconfiguration wording.
 4. Install the exact reviewer helper artifact from its public instructions.
 5. Exercise: grant one tab → list/read/snapshot → approve action → deny action → revoke → browser restart/re-grant.
 6. Confirm audit records, origin suspension, and no access to an ungranted tab.
@@ -477,7 +477,7 @@ Submission readiness requires all of the following—no proxy may replace anothe
 - [ ] Required Account-page publisher name/contact email are complete and the emailed verification link has been used.
 - [ ] Dashboard Item ID, manifest key-derived ID, local ID, and native-host allowlist match.
 - [ ] Identity-bootstrap and strictly higher final versions are recorded.
-- [ ] Missing-helper state is clear and setup URL works.
+- [ ] **Native helper unavailable** state is accurate, covers absence/crash/misconfiguration, and setup/troubleshooting URLs work.
 - [ ] Reviewer helper path is public, checksummed, reproducible, and honestly OS-scoped.
 - [ ] Privacy policy is public and matches actual data flow, including downstream MCP-client responsibility.
 - [ ] Required icon, 440×280 promo image, and at least one exact-size screenshot pass validation.
@@ -496,7 +496,7 @@ Approval is not publication. Completion of the initial Store release requires: d
 ```text
 0. Canonical docs
 1. Audit fix + version + deterministic package/verifier
-2. Name + missing-helper UX + permissions + reviewer helper kit
+2. Name + helper-unavailable UX + permissions + reviewer helper kit
 3. Privacy/listing/assets/reviewer packet
 4. H1: account/profile verification + identity-bootstrap upload + Store ID/key
 5. Build strictly higher final version + lock/rehearse exact artifact

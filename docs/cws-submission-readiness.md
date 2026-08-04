@@ -10,7 +10,7 @@ Seven product/package things block a submission. D1 (Verified CRX Uploads after 
 
 1. **B1 — Confirm and implement the Store-facing name.** "AI Tab Grant" is the recommended working default; after confirmation, update the manifest, notifications, and agent-facing strings.
 2. **B2 — Publish accurate privacy material.** Host the policy publicly and complete disclosures for page content, URLs, local audit data, the localhost helper, and downstream MCP-client handling.
-3. **B3 — Make reviewer setup credible.** Add a clear missing-helper state and a reproducible public helper path; keep the macOS/platform limitation explicit.
+3. **B3 — Make reviewer setup credible.** Add an accurate **Native helper unavailable** state covering absence/crash/misconfiguration plus a reproducible public setup/troubleshooting path; keep the macOS/platform limitation explicit.
 4. **B4 — Finalize permission justifications.** Map every manifest permission and broad optional host pattern to verified code usage and the single purpose.
 5. **B5 — Produce compliant listing assets.** Verify icon padding; create exact-size screenshots and the required 440×280 promo image; add missing toolbar icons.
 6. **B6 — Align the permanent Store ID.** Obtain the dashboard public key, verify local/dashboard IDs, and regenerate native-host `allowed_origins`.
@@ -93,7 +93,7 @@ Without the native host the side panel can grant, but no agent connects. Google 
 2. Minimum credible fallback: publish a built helper artifact with an explicit Node prerequisite, one install command, uninstall instructions, and an honest macOS-only statement.
 3. If Google requires an exercisable helper on another reviewer platform, defer submission until that platform is productised.
 
-A reviewer walkthrough and screencast support these paths; they do not replace working setup or a clear missing-helper state. Separate code-signing/notarization remains part of the corporate track unless Google makes it a review condition.
+A reviewer walkthrough and screencast support these paths; they do not replace working setup or an accurate helper-unavailable state. Separate code-signing/notarization remains part of the corporate track unless Google makes it a review condition.
 
 ### B4 — Permission justifications
 
@@ -149,5 +149,5 @@ After Verified Uploads opt-in, future updates become signed `.crx` uploads. Impl
 1. Confirm the D2 working name, "AI Tab Grant", in the pre-Stage-2 decision reply before rename implementation.
 2. Where does the privacy policy get hosted? GitHub Pages off this repo is the default unless there is a reason otherwise.
 3. ~~Publisher account~~ Answered by D3: personal account is sufficient for public listing.
-4. ~~Submit before the native host is productised?~~ Working route from D3 + runbook: prepare a public listing with a clear missing-helper state, reviewer instructions, and a screencast. A signed installer remains planned for the separate corporate track; if Google requires broader reviewer-platform support, pause and productise it rather than simulate functionality.
+4. ~~Submit before the native host is productised?~~ Working route from D3 + runbook: prepare a public listing with an accurate **Native helper unavailable** state, reviewer instructions, and a screencast. A signed installer remains planned for the separate corporate track; if Google requires broader reviewer-platform support, pause and productise it rather than simulate functionality.
 5. Where is the Verified CRX signing key escrowed, and who can access it? (D1)
