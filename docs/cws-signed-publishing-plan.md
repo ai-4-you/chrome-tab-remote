@@ -21,15 +21,16 @@ The extension is functionally mature, but the release path is not ready.
 | Product behavior | 231/231 tests pass; typecheck and lint pass | Ready baseline |
 | Dependency gate | `./precommit.sh` fails because `hono <4.12.34` has a moderate ReDoS advisory | **Blocking** |
 | Distribution decision | Existing 2026-08-02 analysis selected a public listing; enterprise policy can still force-install a public item by ID | Decided for v1 |
-| Publisher identity | No permanent publisher account owner, recovery arrangement, or strong-authentication evidence is recorded | Confirm in H1 |
+| Publisher identity | No permanent owner/recovery/strong-auth evidence, required publisher name, or verified contact email is recorded | Complete in H1 |
 | Store-facing name | Existing 2026-08-02 analysis selected **AI Tab Grant**; explicit current-user confirmation is not recorded, and code still says Chrome Tab Remote | Confirm in the pre-Stage-2 decision reply |
-| Package | Build exists; no deterministic submission ZIP command or artifact verifier | **Blocking** |
+| Package | Build exists; no deterministic bootstrap/final ZIP commands, version transition, candidate lock, or artifact verifier | **Blocking** |
 | Version | Manifest is `0.1.0`; extension package is `0.0.0` | **Blocking** |
 | Extension identity | Manifest pins a development public key; the native host allowlists the resulting ID | Draft Store identity required |
 | Reviewer experience | Panel says only `disconnected`; helper requires this repo, Node, a build, and a macOS-only installer | **Highest rejection risk** |
 | Privacy | No public policy URL or finalized dashboard disclosures | **Blocking** |
 | Listing assets | 128×128 icon exists; its artwork padding is unverified. Existing screenshot is 1322×1630, not an accepted Store screenshot size. Required 440×280 promo image is absent | **Blocking** |
-| Signing | Verified CRX Uploads selected for future updates; private-key custody is undecided | Post-first-publication gate |
+| Publication control | Deferred publishing is selected by this plan but no H2a submission/H2b manual-publish evidence exists | Post-review release gate |
+| Signing | Verified CRX Uploads selected for future updates; custody/recovery and informed irreversible opt-in remain undecided | Post-first-publication gate |
 | Planning state | Canonical plan and reconciled CWS companion documents are committed; semantic reconciliation is complete; no publication implementation has started | Stage 0 complete |
 
 ## Fixed principles and corrected assumptions
@@ -58,22 +59,21 @@ The extension is functionally mature, but the release path is not ready.
 5. **The 440×280 promotional image is required.** Google's [image requirements](https://developer.chrome.com/docs/webstore/images) require the 128×128 icon, a small 440×280 promotional image, and at least one 1280×800 or 640×400 screenshot.
 6. **Local bridge does not mean guaranteed local downstream processing.** The extension communicates with the local native helper and does not itself embed an AI or vendor cloud service. The user-selected MCP client may forward tool results to an external model. Listing and privacy text must describe this boundary and must not promise that data can never leave the machine.
 7. **No reviewer tricks.** A screencast and detailed notes explain setup; they do not replace a comprehensible missing-helper state and a reproducible helper-install path.
+8. **Bootstrap is not submission.** The first ZIP exists only to create the dashboard item and retrieve its public key. Adding that key changes the package, so the final candidate uses a strictly higher version, is rehearsed, and is explicitly uploaded with **Upload New Package** before review.
+9. **Publication is deliberately deferred.** H2a disables automatic publication. Approval creates a staged/ready-to-publish state; H2b manually publishes after a final check and before the dashboard expiry (currently up to 30 days per Google's [update guidance](https://developer.chrome.com/docs/webstore/update/)).
+10. **Verified Uploads opt-in is human-only.** Treat it as irreversible, require the human to read/capture the live dashboard warning, and never automate the opt-in click. Public docs verify the future-signing requirement but do not clearly document a disable path.
 
 ## Minimal-human operating model
 
-Human work is concentrated into one short pre-Stage-2 decision reply and three guided operational batches. Everything else is prepared and verified beforehand.
+Human work is concentrated into one short pre-Stage-2 decision reply and four guided operational touchpoints. H2 is split because Google review separates submission from the deliberately deferred final publication. Everything else is prepared and verified beforehand.
 
 ```text
-Agent/repo work ──▶ H1: account + draft ──▶ Agent/repo work
-                                      │
-                                      ▼
-                         H2: listing certification + submit
-                                      │
-                                      ▼
-                         Review response, if any
-                                      │
-                                      ▼
-                         H3: Verified Uploads opt-in
+Agent/repo work → H1: account + identity-bootstrap upload
+                → Agent: final higher-version build + rehearsal
+                → H2a: upload exact final ZIP + certify + submit deferred
+                → Google review
+                → H2b: manually publish approved staged item
+                → H3: informed Verified Uploads opt-in
 ```
 
 ### Pre-Stage-2 decision reply
@@ -94,23 +94,32 @@ The human:
 
 1. confirms the permanent publisher-account owner, monitored address, recovery method, and strong authentication, then signs in;
 2. accepts Google’s developer agreement and pays the one-time fee;
-3. creates the draft item and uploads the prepared draft ZIP;
-4. copies the dashboard Item ID and **Package → View public key** into a local handoff file or directly into the guided terminal prompt.
+3. completes the Account page per Google's [account setup guidance](https://developer.chrome.com/docs/webstore/set-up-account): required publisher name, required contact-email verification through the emailed link, staged/published notification preferences, and the physical-address applicability check;
+4. creates the draft item and uploads the prepared **identity-bootstrap ZIP**;
+5. copies the dashboard Item ID and **Package → View public key** into a local handoff file or directly into the guided terminal prompt.
 
 The agent does not handle credentials, payment details, account recovery, or acceptance of terms.
 
-### Human batch H2 — legal certification and submission
+### Human batch H2a — final artifact, certification, and deferred submission
 
-Target: 20–30 focused minutes after every dashboard answer and asset has been prebuilt.
+Target: 20–30 focused minutes after every dashboard answer, asset, and exact final ZIP has been prebuilt and rehearsed.
 
 The human:
 
-1. reviews and truthfully confirms the privacy/data-use declarations;
-2. uploads prebuilt listing assets and pastes reviewed copy;
-3. verifies distribution visibility and support contact;
-4. performs the final **Submit for review** action.
+1. uses **Package → Upload New Package** to upload the single rehearsed final ZIP from the handoff folder;
+2. verifies the dashboard shows its strictly higher final version;
+3. reviews and truthfully confirms the privacy/data-use declarations;
+4. uploads prebuilt listing assets and pastes reviewed copy;
+5. verifies public distribution visibility, support contact, reviewer instructions, and links;
+6. clicks **Submit for Review** and explicitly unchecks automatic publication to select deferred publishing.
 
-The agent may guide screen-by-screen but does not click legal certifications or submit.
+The agent may guide screen-by-screen but does not upload under the user's credentials, click legal certifications, choose publication timing, or submit.
+
+### Human batch H2b — manual publication after approval
+
+Target: 5–10 focused minutes after Google marks the item approved and ready to publish.
+
+The human verifies the staged version/listing once more and manually publishes it before the dashboard's staged-submission expiry. Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) gives up to 30 days; the live dashboard expiry is authoritative and must be recorded.
 
 ### Human batch H3 — signed future uploads
 
@@ -120,8 +129,9 @@ The human:
 
 1. approves the signing-key custody location and authorized operators;
 2. performs or observes offline key generation;
-3. registers only the public key under **Package → Opt in**;
-4. stores and tests the documented recovery material.
+3. reads the live Package-tab warning, confirms the opt-in is to be treated as irreversible, and records an informed acknowledgment; public documentation verifies the future-signing requirement, while the live dashboard warning is the authority for disable/irreversibility wording;
+4. personally clicks **Package → Opt in** and registers only the public key;
+5. stores and tests the documented recovery material.
 
 The private key never enters the repository, chat, logs, screenshots, or ordinary CI artifacts.
 
@@ -137,15 +147,18 @@ The private key never enters the repository, chat, logs, screenshots, or ordinar
 | Generate listing/privacy/reviewer-copy drafts | Agent | High | Human reviews legal/data claims |
 | Generate screenshot capture checklist and validate dimensions | Agent/script | High | Human may help with visual capture if browser automation is insufficient |
 | Choose publisher owner, recovery, and strong authentication | Human | None | Never automated or inferred |
-| Create Store account and pay fee | Human | None | Never automated |
+| Create Store account, pay fee, set publisher name, and verify contact email | Human | None | Never automated; emailed verification link stays human-controlled |
 | Accept developer agreement or limited-use certification | Human | None | Never automated |
-| Upload first draft and retrieve Store public key/ID | Human, agent-guided | Low | Dashboard credentials remain human-controlled |
+| Upload identity-bootstrap ZIP and retrieve Store public key/ID | Human, agent-guided | Low | Dashboard credentials remain human-controlled |
+| Upload the exact rehearsed final ZIP with a higher version | Human, agent-guided | Low | Never substitute another artifact; credentials remain human-controlled |
 | Insert public Store key and verify ID consistency | Agent/script | Full | Public material; runtime/release edit still needs implementation approval |
 | Build reviewer helper kit | Agent/script | High | Code-signing/notarization credentials remain human-controlled |
 | Record reviewer screencast | Human + agent script/checklist | Medium | No secrets or unrelated browser data in recording |
-| Final submission | Human | None | Never automated |
+| Choose deferred publishing and submit for review | Human | None | Never automated; publication timing is an informed choice |
+| Manually publish the approved staged item | Human | None | Never automated; verify version/listing and live expiry first |
 | Triage rejection notice | Agent | High | Human supplies notice; behavior/policy changes require approval |
 | Generate Verified Uploads key pair | Human-controlled offline procedure | Deliberately limited | Private-key custody decision cannot be delegated |
+| Opt into Verified CRX Uploads | Human | None | Treat as irreversible; read live dashboard warning; never automate |
 | Sign and verify future CRX | Release script/protected CI | High | Manual approval gate; no final auto-publish |
 | Upload future candidate | Initially human; later protected manual-dispatch automation may be evaluated | Medium | Credentials in protected secret store; final publish stays human |
 
@@ -275,132 +288,135 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 
 ---
 
-### Stage 4 — Human batch H1: account, draft item, permanent identity
+### Stage 4 — Human batch H1: account, identity bootstrap, permanent Store ID
 
-**Entry:** Draft ZIP passes Stage 1 verification; H1 handoff contains only the ZIP, checksum, account checklist, and public-key capture instructions.
+**Entry:** The identity-bootstrap ZIP passes Stage 1 verification at version `V_bootstrap`; H1 handoff contains only that ZIP, checksum, account checklist, and public-key capture instructions.
 
 **Ordered work:**
 
-1. Human registers the permanent dedicated publisher account and pays the fee.
-2. Human creates a draft item and uploads the verified **Store-draft ZIP** without publishing.
+1. Human registers the permanent publisher account, pays the fee, sets the required publisher name, verifies the required contact email through Google's emailed link, configures notifications, and records whether a physical address applies.
+2. Human creates a draft item and uploads the verified **identity-bootstrap ZIP** without submitting it for review.
 3. Human copies Item ID and **Package → View public key**.
-4. Agent inserts the public key into the release manifest/source of truth.
-5. Build final Store ZIP and load its unpacked contents locally.
-6. Automatically compare local extension ID with dashboard Item ID.
-7. Generate the native-host `allowed_origins` entry from that ID; reinstall helper and rerun the clean-profile flow.
-8. Search the repository and generated artifacts for stale development IDs.
+4. Agent inserts the public Store key into the release manifest/source of truth.
+5. Because the packaged manifest changed, choose `V_final > V_bootstrap`; Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) requires each uploaded replacement version to be larger.
+6. Build the final Store ZIP at `V_final` and load its unpacked contents locally.
+7. Automatically compare the local extension ID with the dashboard Item ID.
+8. Generate the native-host `allowed_origins` entry from that ID, reinstall the helper, and search source/generated artifacts for stale development IDs.
 
-**Automation:** Public-key normalization; extension-ID derivation/comparison; stale-ID scan; native-host manifest generation; final package rebuild.
+**Automation:** Public-key normalization; strict version comparison; extension-ID derivation/comparison; stale-ID scan; native-host manifest generation; final package rebuild.
 
-**Gate:** Dashboard Item ID = local final-build ID = helper `allowed_origins` ID. Exact final ZIP passes all package checks and functional rehearsal.
+**Gate:** Required account fields/contact verification are complete. Dashboard Item ID = local final-build ID = helper `allowed_origins` ID. The not-yet-uploaded final ZIP at `V_final` passes package checks.
 
-**Evidence:** Public-key fingerprint, ID-consistency report, ZIP SHA-256, helper-manifest excerpt with no secrets.
+**Evidence:** Sanitized account-setup checklist, public-key fingerprint, `V_bootstrap → V_final` record, ID-consistency report, final ZIP SHA-256, and helper-manifest excerpt with no secrets.
 
-**Risks:** Confusing the Store item key with the future Verified Uploads key; rebuilding the extension but not reinstalling the helper; stale ID in reviewer instructions.
+**Risks:** Mistaking the bootstrap ZIP for the release candidate; reusing `V_bootstrap`; confusing the Store item key with the future Verified Uploads key; stale native-host ID.
 
-**Recovery:** Do not submit. Regenerate all ID-derived artifacts from the dashboard public key and repeat the consistency gate.
+**Recovery:** Do not continue to rehearsal. Correct account verification or regenerate all ID/version-derived artifacts, choose a version greater than every package already uploaded to the item, and repeat the gate.
 
 ---
 
-### Stage 5 — Exact-artifact release rehearsal
+### Stage 5 — Lock and rehearse the exact final artifact
 
-**Entry:** Permanent Store identity is aligned; listing/reviewer packet is complete.
+**Entry:** Permanent Store identity is aligned; final ZIP `V_final` and listing/reviewer packet are complete.
 
 **Ordered work:**
 
-1. Use a fresh Chrome profile.
-2. Install the unpacked contents of the final ZIP and confirm displayed ID/version.
+1. Place exactly one candidate ZIP in the generated H2 handoff folder; record its filename, absolute handoff path, version, SHA-256, source commit, and build command in the release report.
+2. Use a fresh Chrome profile and install the unpacked contents of that ZIP; confirm displayed Store ID and `V_final`.
 3. Verify missing-helper guidance first.
 4. Install the exact reviewer helper artifact from its public instructions.
 5. Exercise: grant one tab → list/read/snapshot → approve action → deny action → revoke → browser restart/re-grant.
 6. Confirm audit records, origin suspension, and no access to an ungranted tab.
-7. Compare package checksum with the artifact selected for dashboard upload.
-8. Complete a policy/listing parity checklist.
+7. Complete package, permission, privacy, listing, and reviewer-instruction parity checks.
+8. Mark the candidate immutable: any packaged-file change invalidates the rehearsal and requires a strictly higher version.
 
-**Automation:** Scripted artifact/hash checks and MCP smoke flow; browser automation where reliable. Human observation remains required for Chrome permission prompts, approval UI, and visual quality.
+**Automation:** Handoff-folder generation; single-ZIP assertion; artifact/hash/version/source checks; MCP smoke flow; browser automation where reliable. Human observation remains required for Chrome permission prompts, approval UI, and visual quality.
 
-**Gate:** Every rehearsal step passes against the exact candidate; no open blocking defect or inaccurate disclosure remains.
+**Gate:** Every rehearsal step passes against the single locked candidate. Its release report is complete, and no open blocking defect or inaccurate disclosure remains.
 
-**Evidence:** Dated rehearsal record, command output, screenshots, artifact hash, completed parity checklist.
+**Evidence:** Dated rehearsal record, command output, screenshots, candidate-lock release report, artifact hash, and completed parity checklist.
 
-**Risks:** Testing a different build than the uploaded ZIP; browser-profile residue hiding setup failures.
+**Risks:** Rehearsing one ZIP but selecting another; browser-profile residue hiding setup failures; changing packaged files after the rehearsal.
 
-**Recovery:** Discard the candidate, rebuild once, restart from a fresh profile, and regenerate evidence. Never patch the ZIP by hand.
-
----
-
-### Stage 6 — Human batch H2: dashboard completion and submission
-
-**Entry:** Stage 5 green; one handoff folder contains final ZIP/hash, copy, images, URLs, reviewer notes, and completed evidence checklist.
-
-**Ordered work:**
-
-1. Human verifies dashboard account/contact information.
-2. Human pastes prepared listing and privacy text, uploads assets, and checks distribution settings.
-3. Human personally reviews and accepts applicable legal/data-use certifications.
-4. Human verifies reviewer instructions and helper/screencast links in a logged-out browser.
-5. Human submits for review.
-6. Record submitted version, checksum, timestamp, and dashboard status without recording credentials.
-
-**Automation:** Preflight validator and handoff-folder generation. Final submission is deliberately manual.
-
-**Gate:** Dashboard shows the expected version under review; submitted checksum and source tag/commit are recorded.
-
-**Evidence:** Sanitized submission receipt/status and release record.
-
-**Risks:** Dashboard copy differs from reviewed source; wrong ZIP selected; broken private screencast permissions.
-
-**Recovery:** If still editable, withdraw/cancel and correct. Otherwise respond transparently through the review channel; do not create a second item to dodge review.
+**Recovery:** Discard/unlock the candidate. If packaged files change, choose a version greater than every package already uploaded, rebuild once, restart from a fresh profile, and regenerate all evidence. Never patch the ZIP by hand.
 
 ---
 
-### Stage 7 — Review monitoring and rejection handling
+### Stage 6 — Human batch H2a: upload final artifact and submit deferred
 
-**Entry:** Item is under review.
+**Entry:** Stage 5 is green; one handoff folder contains exactly one locked final ZIP plus its release report/hash, copy, images, URLs, reviewer notes, and completed evidence checklist.
 
 **Ordered work:**
 
-1. Human monitors the permanent publisher mailbox; agent needs only sanitized notices.
-2. Map each notice to code, package, listing, privacy, or reviewer-access evidence.
-3. Reproduce any functional finding against the submitted checksum.
-4. Make the narrowest honest correction under the normal approval/TDD process.
-5. Increment version, regenerate all evidence, and resubmit through H2.
+1. Human confirms required Account-page fields and verified contact email remain complete.
+2. Human opens **Package → Upload New Package** and selects the only candidate ZIP in the handoff folder.
+3. Human and agent-guided checklist verify the dashboard now shows `V_final`; record selected filename/path, local SHA-256, upload timestamp, and dashboard version. The bootstrap package is no longer the package to be reviewed.
+4. Human pastes prepared listing/privacy text, uploads assets, and verifies public distribution, support contact, reviewer instructions, and helper/screencast links.
+5. Human personally reviews and accepts applicable legal/data-use certifications.
+6. Human clicks **Submit for Review** and explicitly unchecks automatic publication, selecting deferred publishing.
+7. Record the under-review status, expected staged-publication mode, `V_final`, source commit, and local checksum without recording credentials.
 
-**Automation:** Notice-to-checklist triage template; changed-permission/data-flow detection; release-report diff.
+**Automation:** Preflight validator; handoff-folder generation; one-candidate assertion; immediate pre-upload hash/version check; release-record generation. Upload, certifications, publication-mode choice, and submission remain manual.
 
-**Gate:** Approved/public item, or a concrete documented blocker requiring product work. Rejection is not success and must not be hidden.
+**Gate:** Dashboard shows `V_final` under review, deferred publishing is recorded, and the selected artifact evidence matches the locked Stage 5 candidate. No package mutation occurred after rehearsal.
 
-**Evidence:** Review outcome, public item URL/ID when approved, or rejection remediation record.
+**Evidence:** Candidate-lock report; local SHA-256; sanitized Package-tab/version evidence; selected-file attestation; deferred-publishing selection; submission receipt/status; source commit.
 
-**Risks:** Guessing at vague feedback; unrelated refactors during remediation; claiming fixed without reproducing.
+**Risks:** Selecting the bootstrap/wrong ZIP; uploading the final ZIP but rehearsing another; forgetting deferred publishing; dashboard copy differing from reviewed source; broken reviewer links.
 
-**Recovery:** Ask Google for clarification where supported; keep the item and history; never misdescribe behavior to obtain approval.
+**Recovery:** Cancel review. If only dashboard metadata changes, correct and resubmit as Google permits. If any packaged file changes, increment above the dashboard's highest uploaded version, rebuild, repeat Stage 5, upload the new locked candidate, and resubmit. Never create a second item to dodge review.
 
 ---
 
-### Stage 8 — Human batch H3: Verified CRX Uploads and future releases
+### Stage 7 — Review, staged approval, and human publication
 
-**Entry:** Initial item approved; key-custody owner, storage, backup, recovery, and authorized signers are documented and approved.
+**Entry:** Exact locked artifact `V_final` is under review with deferred publishing selected.
 
 **Ordered work:**
 
-1. Generate a supported RSA key pair offline under human control.
+1. Human monitors the permanent publisher mailbox and dashboard; agent receives only sanitized notices/status.
+2. If rejected, map each notice to package, code, listing, privacy, or reviewer-access evidence; reproduce findings against the submitted candidate.
+3. Make the narrowest honest correction under normal approval/TDD. Packaged changes require a version greater than every prior dashboard upload, then Stage 5 and H2a repeat.
+4. If approved, verify the dashboard state is **ready to publish/staged**, not public. Record the live expiry; Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) permits up to 30 days, but the dashboard date is authoritative.
+5. H2b: human rechecks staged version, listing, privacy/support links, and known limitations, then manually clicks Publish before expiry.
+6. Verify the public Store URL resolves and shows the intended version/publisher/listing.
+
+**Automation:** Status/expiry reminders; notice-to-checklist triage; changed-permission/data-flow detection; release-report diff; post-publication URL/version check. Final Publish remains manual.
+
+**Gate:** Either (a) the human-published item is publicly reachable at the intended version with publication evidence, or (b) a concrete rejection/staged-publication blocker is documented. Approval/staged status alone is not publication.
+
+**Evidence:** Separate review outcome and manual-publication records; staged expiry; public item URL/ID/version/publisher check; or rejection remediation record.
+
+**Risks:** Accidentally enabling auto-publish; treating approved/staged as public; missing the staged expiry; publishing the wrong version/listing; guessing at vague rejection feedback.
+
+**Recovery:** Before publication, use Cancel publish to return the staged item to draft when correction is needed, then repeat the required gates/review. If the staged submission expires it reverts to draft and must be resubmitted. Never misdescribe behavior or create another item to evade review.
+
+---
+
+### Stage 8 — Human batch H3: informed Verified CRX Uploads opt-in and future releases
+
+**Entry:** Initial item is public; key-custody owner, storage, backup, recovery, and authorized signers are documented and approved.
+
+**Ordered work:**
+
+1. Generate a supported 2048-bit RSA key pair offline under human control.
 2. Store the private key in the approved password manager/HSM/offline encrypted escrow; create a separately controlled backup and recovery test.
-3. Register only the public key through **Package → Opt in**.
-4. Build an unchanged-version test candidate only if Google’s workflow permits non-publishing validation; otherwise validate signing locally and use the next real version.
-5. Add deterministic future-release commands: build ZIP → verify → sign CRX → verify signature/public-key fingerprint → protected upload handoff.
-6. Require a manual approval before credential use and preserve final publish as a human action.
-7. Document lost-key escalation; Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) describes support-assisted recovery for a lost Verified Uploads key.
+3. Human reads the live Package-tab opt-in warning. Safety rule: treat opt-in as irreversible and never automate it. Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) establishes that every future package update must be signed after opt-in but does not clearly document a disable path; capture the dashboard's exact warning and pause if it differs from this assumption.
+4. Human records informed acknowledgment, personally clicks **Package → Opt in**, and registers only the public key.
+5. Validate CRX signing and fingerprint checks locally without uploading a same-version test package. The next real package update must use a strictly larger version.
+6. Add deterministic future-release commands: build → verify → sign CRX → verify signature/public-key fingerprint → protected upload handoff.
+7. Require manual approval before credential use; future submission/publication timing retains the H2a/H2b human gates.
+8. Document and test the lost-key escalation path before opt-in. The public update page fetched for this plan does not specify recovery timing; capture the current dashboard/support instructions rather than inventing a guarantee.
 
-**Automation:** Signing and verification can be scripted in a protected release environment. Key generation, custody approval, and final publish remain human-controlled.
+**Automation:** Local signing and verification can be scripted in a protected release environment. Key generation/custody approval, opt-in acknowledgment/click, credential use approval, and final publication remain human-controlled.
 
-**Gate:** A future release cannot be uploaded unless signed by the registered key; key recovery is tested; no private material appears in repository history, logs, CI artifacts, or chat.
+**Gate:** Informed irreversible-choice acknowledgment is recorded; registered public-key fingerprint matches custody records; recovery is tested; a future release cannot be uploaded unless signed; no private material appears in repository history, logs, CI artifacts, or chat.
 
-**Evidence:** Public-key fingerprint, redacted custody/recovery attestation, local signature verification, protected-release runbook.
+**Evidence:** Captured/redacted dashboard-warning text, informed opt-in attestation, public-key fingerprint, redacted custody/recovery attestation, local signature verification, protected-release runbook.
 
-**Risks:** Lost/compromised key; secret exfiltration through CI logs; confusing CRX upload signing with the Store’s final distribution signing.
+**Risks:** Irreversible opt-in without tested custody; lost/compromised key; secret exfiltration through CI logs; same-version upload attempts; confusing upload signing with Google's final Store signing.
 
-**Recovery:** Stop releases and follow the support-assisted recovery path documented in Google's [update guidance](https://developer.chrome.com/docs/webstore/update/); disclose incidents where applicable. Never generate a replacement silently or disable protections as a shortcut.
+**Recovery:** Before opt-in, stop if custody/recovery, escalation instructions, or dashboard wording are unclear. After opt-in, stop releases and use the pre-verified dashboard/support escalation path; disclose incidents where applicable. Never generate a replacement silently or seek to bypass signing protections.
 
 ## Automation backlog, prioritized
 
@@ -418,7 +434,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 7. **Reviewer helper-kit builder** with checksums and uninstall instructions.
 8. **Clean-profile rehearsal script** that guides unavoidable Chrome UI steps and automates MCP checks.
 9. **Screenshot workflow** that opens deterministic demo pages, removes personal data, captures, and validates exact dimensions.
-10. **Dashboard handoff generator** that produces one folder and one short human checklist for H1/H2.
+10. **Dashboard handoff generator** that produces single-candidate folders and short checklists for H1, H2a, and H2b.
 11. **Link checker** for privacy, support, source, helper, and screencast URLs.
 
 ### P2 — after first approval
@@ -434,7 +450,7 @@ Automation must fail closed. A red verifier blocks the release; it must never re
 | Blocker | Release impact | Resolution stage | Owner |
 |---|---|---|---|
 | Final Store name, policy host, and reviewer-helper fallback unconfirmed | Blocks Stage 2 implementation | Pre-Stage-2 reply | Human; agent supplies defaults |
-| Permanent publisher owner/recovery/strong authentication unconfirmed | Blocks H1 dashboard work | H1 | Human only |
+| Publisher owner/recovery, required publisher name, verified contact email, and strong authentication incomplete | Blocks H1 dashboard work | H1 | Human only |
 | Hono moderate ReDoS advisory | Precommit/release gate red | 1 | Agent after approval |
 | No deterministic package/verifier | Cannot prove submitted artifact | 1 | Agent after approval |
 | Version drift | Wrong/ambiguous release version | 1 | Agent after approval |
@@ -445,8 +461,10 @@ Automation must fail closed. A red verifier blocks the release; it must never re
 | No privacy policy/public URL | Dashboard blocker | 3 | Agent draft; human certification |
 | Missing compliant screenshots/promo image; icon padding unverified | Listing blocker | 3 | Agent + human visual review |
 | Development ID vs Store ID | Native messaging silently fails | 4 | Human dashboard + agent automation |
-| No exact-artifact rehearsal | Broken-functionality risk | 5 | Agent + human UI observation |
-| Verified Uploads custody undecided | Future signed updates blocked, not first publication | 8 | Human decision |
+| No exact-artifact rehearsal and single-candidate lock | Wrong artifact may be uploaded | 5 | Agent + human UI observation |
+| Final rehearsed ZIP not uploaded over bootstrap package | Bootstrap could be reviewed instead of release candidate | H2a | Human, agent-guided |
+| Deferred-publish/manual-publication gates not yet exercised | Approval could auto-publish or remain staged/expire | H2a/H2b | Human only |
+| Verified Uploads custody and informed irreversible opt-in undecided | Future signed updates blocked, not first publication | 8 | Human only |
 
 ## Evidence gate for “ready to submit”
 
@@ -456,15 +474,22 @@ Submission readiness requires all of the following—no proxy may replace anothe
 - [ ] `./precommit.sh` passes, including dependency audit.
 - [ ] Final ZIP is generated, not hand-edited; checksum and contents are recorded.
 - [ ] Package verifier passes and permissions match declarations.
+- [ ] Required Account-page publisher name/contact email are complete and the emailed verification link has been used.
 - [ ] Dashboard Item ID, manifest key-derived ID, local ID, and native-host allowlist match.
+- [ ] Identity-bootstrap and strictly higher final versions are recorded.
 - [ ] Missing-helper state is clear and setup URL works.
 - [ ] Reviewer helper path is public, checksummed, reproducible, and honestly OS-scoped.
 - [ ] Privacy policy is public and matches actual data flow, including downstream MCP-client responsibility.
 - [ ] Required icon, 440×280 promo image, and at least one exact-size screenshot pass validation.
 - [ ] Reviewer instructions and screencast are accessible without publisher credentials.
-- [ ] Exact final artifact passes the clean-profile end-to-end rehearsal.
+- [ ] Exactly one locked final ZIP passes the clean-profile end-to-end rehearsal; its filename/path/version/hash/source commit are recorded.
+- [ ] That exact ZIP has been uploaded with **Upload New Package** and the dashboard shows its final version rather than the bootstrap version.
 - [ ] Known limitations and residual risks are recorded.
-- [ ] Human has reviewed legal/data-use declarations and is ready to perform submission.
+- [ ] Human has reviewed legal/data-use declarations, selected deferred publishing, and is ready to perform submission.
+
+## Publication completion gate
+
+Approval is not publication. Completion of the initial Store release requires: deferred/ready-to-publish status recorded; H2b human version/listing check; manual Publish before the live expiry; public Store URL resolving with the intended item ID/version/publisher; and separate review versus publication timestamps.
 
 ## Recommended execution order
 
@@ -473,11 +498,11 @@ Submission readiness requires all of the following—no proxy may replace anothe
 1. Audit fix + version + deterministic package/verifier
 2. Name + missing-helper UX + permissions + reviewer helper kit
 3. Privacy/listing/assets/reviewer packet
-4. H1: account + draft upload + permanent Store ID/key
-5. Rebuild ID-bound artifacts + exact-artifact rehearsal
-6. H2: certify + submit
-7. Review/remediate until approved
-8. H3: Verified CRX Uploads + protected future-release path
+4. H1: account/profile verification + identity-bootstrap upload + Store ID/key
+5. Build strictly higher final version + lock/rehearse exact artifact
+6. H2a: upload exact final ZIP + certify + submit with deferred publishing
+7. Review/remediate; on approval H2b manually publishes before expiry
+8. H3: informed Verified Uploads opt-in + protected future-release path
 ```
 
 ## First smallest safe next slice
@@ -501,6 +526,7 @@ This slice changes no product permissions, consent behavior, privacy claims, Sto
 - [Use of permissions](https://developer.chrome.com/docs/webstore/program-policies/permissions)
 - [Supplying images](https://developer.chrome.com/docs/webstore/images)
 - [Register your developer account](https://developer.chrome.com/docs/webstore/register)
+- [Set up your developer account](https://developer.chrome.com/docs/webstore/set-up-account)
 - [Manifest `key` and consistent extension ID](https://developer.chrome.com/docs/extensions/reference/manifest/key)
 - [Native messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)
 - [Verified uploads in the Chrome Web Store](https://developer.chrome.com/blog/verified-uploads-cws)

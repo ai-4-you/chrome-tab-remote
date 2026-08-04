@@ -1,7 +1,7 @@
 direction: down
 
 title: |md
-  **Chrome Web Store submission — readiness flow**
+  **Chrome Web Store readiness gates**
 |
 
 decide: {
@@ -12,47 +12,55 @@ decide: {
   reviewer: "Reviewer helper + missing-helper UX"
 }
 
-package: {
-  label: "**2. Make the package submittable**"
+prepare: {
+  label: "**2. Prepare release system**"
   style.fill: "#e8f0fe"
-  icons: "Icon set 16/32/48/128"
+  audit: "Green precommit + dependency audit"
   version: "Single version source"
-  zip: "npm run package -> submission ZIP"
-  key: "Resolve manifest key"
+  package: "Deterministic package + verifier"
+  listing: "Permissions + privacy + assets"
 }
 
-listing: {
-  label: "**3. Write the listing**"
-  style.fill: "#e6f4ea"
-  purpose: "Single purpose statement"
-  perms: "Justification per permission"
-  privacy: "Privacy policy + data disclosures"
-  shots: "Screenshots 1280x800 + promo 440x280"
-  test: "Reviewer instructions + screencast"
-}
-
-draft: {
-  label: "**4. Draft upload**"
+h1: {
+  label: "**3. H1 — Account + permanent item ID**"
   style.fill: "#fef7e0"
-  upload: "Upload ZIP, do not publish"
-  pubkey: "Package tab -> View public key"
-  pin: "Pin key into manifest"
+  account: "Publisher name + verified contact email"
+  bootstrap: "Upload V_bootstrap (identity only)"
+  key: "View Store public key + item ID"
 }
 
-submit: {
-  label: "**5. Public first submission**"
+final: {
+  label: "**4. Final artifact gate**"
+  style.fill: "#e6f4ea"
+  pin: "Pin Store key + align host ID"
+  version: "Build V_final > V_bootstrap"
+  rehearse: "Lock + rehearse exact ZIP"
+}
+
+h2a: {
+  label: "**5. H2a — Submit exact artifact**"
   style.fill: "#f3e8fd"
-  visibility: "Visibility = public"
-  review: "Human certifies + submits"
+  upload: "Upload New Package: locked ZIP"
+  verify: "Dashboard version = V_final"
+  public: "Visibility = public"
+  defer: "Submit deferred (auto-publish OFF)"
 }
 
-after: {
-  label: "**6. After approval**"
+h2b: {
+  label: "**6. H2b — Publish after approval**"
   style.fill: "#e8f0fe"
-  crx: "Opt in: Verified CRX Uploads"
-  custody: "Protect + test signing-key recovery"
+  staged: "Approved = staged, not public"
+  expiry: "Record live expiry"
+  publish: "Human verifies + clicks Publish"
+  proof: "Verify public URL/version"
 }
 
-decide -> package -> listing -> draft -> submit -> after
+h3: {
+  label: "**7. H3 — Verified Uploads**"
+  style.fill: "#fef7e0"
+  custody: "Custody + recovery tested"
+  warning: "Read warning; treat as irreversible"
+  optin: "Human-only opt-in"
+}
 
-draft.pin -> package.zip: "rebuild ZIP with pinned key"
+decide -> prepare -> h1 -> final -> h2a -> h2b -> h3

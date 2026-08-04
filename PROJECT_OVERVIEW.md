@@ -44,7 +44,7 @@
 ## Chrome Web Store blockers (planning state, 2026-08-04)
 
 - `./precommit.sh` is red because the dependency audit reports the Hono ReDoS advisory; 231 tests, typecheck, and lint remain green.
-- Deterministic Store packaging/verifier, unified versioning, compliant listing assets, public privacy policy, reviewer-safe missing-helper UX, reviewer helper distribution, permanent Store ID alignment, and future signing-key custody remain undone.
+- Deterministic bootstrap/final Store packaging and verifier, unified versioning, compliant listing assets, public privacy policy, reviewer-safe helper distribution, required publisher-profile/contact verification, permanent Store ID alignment, exact final-package upload, deferred/manual publication, and future signing-key custody/informed opt-in remain undone.
 - Execution order, evidence gates, automation boundaries, and minimal human batches are canonical in `docs/cws-signed-publishing-plan.md`.
 - No account, dashboard item, signing key, submission, or publication has been created by this planning work.
 

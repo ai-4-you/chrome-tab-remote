@@ -29,8 +29,6 @@ Three mitigations, in order of value:
 2. **A screencast.** Unlisted YouTube or Drive link in the reviewer notes: one continuous unedited take on a fresh profile — install the host, load the extension, create a grant, trigger an action, show the approval prompt. As project-prepared evidence—not a Google requirement—the recording may also show the helper process starting and exiting without exposing unrelated processes or private data.
 3. **Written reviewer notes** (template below).
 
-Unverified but cheap to test: practitioner advice suggests moving `nativeMessaging` into `optional_permissions` so the base extension reviews faster, with the deep review only on opt-in. Chrome's docs do not state whether `nativeMessaging` is permitted as an optional permission. Load an unpacked build with it moved and see whether Chrome warns at load time — 10 minutes to answer, and it changes the review profile if it works.
-
 ## Reviewer notes template
 
 Paste into the dashboard's reviewer-instructions field:
@@ -135,35 +133,36 @@ Called out separately because it silently breaks the reviewer's install.
 
 The native host manifest's `allowed_origins` must list the **published** extension ID. Today `packages/extension/manifest.json:5` pins a development key, and `install-native-host.mjs` registers whatever ID that produces. If the installer a reviewer downloads registers the development ID, the store-installed extension cannot connect — which presents as broken functionality.
 
-Google's [`manifest.key` guidance](https://developer.chrome.com/docs/extensions/reference/manifest/key) documents draft upload → **Package → View public key** → add the public key to the manifest → compare local and dashboard IDs. Project continuation: rebuild and regenerate the host installer against that verified ID before submission.
+Google's [`manifest.key` guidance](https://developer.chrome.com/docs/extensions/reference/manifest/key) documents draft upload → **Package → View public key** → add the public key to the manifest → compare local and dashboard IDs. Because adding the key changes the packaged manifest, use a strictly higher final version, rebuild/rehearse it, regenerate the host installer, then explicitly upload that exact final ZIP with **Upload New Package** before submission ([update guidance](https://developer.chrome.com/docs/webstore/update/)).
 
 ## Ordered checklist
 
 **A. Before touching the dashboard**
-1. Rename to "AI Tab Grant" (manifest, notifications, agent-facing strings).
-2. Add 16/32/48 icons; verify 128 has correct transparent padding.
-3. Single version source; `build.mjs` injects it.
-4. Add `npm run package` producing a ZIP from `dist/`.
-5. Add the "native helper not installed" side-panel state.
-6. Install the produced ZIP in a clean Chrome profile and exercise it end to end.
+1. Confirm the working Store name, then rename manifest, notifications, and agent-facing strings.
+2. Add 16/32/48 icons; verify 128 padding; prepare screenshots and required promo image.
+3. Establish one version source plus deterministic bootstrap/final packaging and verification commands.
+4. Add the clear missing-helper state and public reviewer-helper path.
+5. Build and verify an identity-bootstrap ZIP at `V_bootstrap`; label it non-release.
 
-**B. Account**
-7. Register with a dedicated monitored address. Google's [registration guidance](https://developer.chrome.com/docs/webstore/register) says the account email cannot be changed in place; changing identity requires a new account and item transfer.
+**B. Account — H1**
+6. Register with the permanent monitored account, enable strong authentication, pay the fee, set the required publisher name, verify the required contact email through Google's emailed link, configure notifications, and check physical-address applicability ([account setup](https://developer.chrome.com/docs/webstore/set-up-account)).
 
-**C. Draft item**
-8. Upload the ZIP without submitting; pull the public key; pin it; rebuild; regenerate the host installer.
+**C. Identity bootstrap and final build**
+7. Upload the bootstrap ZIP without submitting; retrieve Item ID and **Package → View public key**.
+8. Pin the public Store key, choose `V_final > V_bootstrap`, rebuild, verify ID parity, regenerate the native-host allowlist, and produce one locked final ZIP.
+9. Rehearse that exact final ZIP end to end in a fresh profile; record path, filename, version, SHA-256, source commit, and evidence.
 
-**D. Listing**
-9. Screenshots, description, summary, category.
-10. Privacy policy published and linked in the Privacy tab.
-11. Permission justifications; declare no remote code.
-12. Reviewer notes + screencast.
+**D. Exact package + listing — H2a**
+10. Use **Package → Upload New Package** to select the single rehearsed final ZIP; verify the dashboard shows `V_final`.
+11. Complete screenshots, description, summary, category, privacy policy/disclosures, permission justifications, remote-code declaration, reviewer instructions, and screencast.
+12. Review legal/data-use declarations, click **Submit for Review**, and uncheck automatic publication to select deferred publishing ([publish guidance](https://developer.chrome.com/docs/webstore/publish)).
 
-**E. Submit** — then plan for days to a few weeks, without treating that range as a commitment. If rejected, use Google’s notice and official troubleshooting guidance to make a concrete correction, regenerate the evidence, and resubmit.
+**E. Review and manual publication — H2b**
+13. Plan for days to a few weeks without treating that as a commitment. On rejection, correct concretely, increment packaged versions, repeat rehearsal/upload, and resubmit. On approval, record staged expiry, recheck version/listing, and manually Publish within the live deadline (currently up to 30 days per [update guidance](https://developer.chrome.com/docs/webstore/update/)). Approval alone is not public release.
+14. Verify the public URL, item ID, version, publisher, and listing; then hand corporate reviewers the ID and separate trust package.
 
-**F. After approval**
-13. After approval and custody preparation, opt into Verified CRX Uploads; Google then requires future uploads to be signed by the registered publisher key ([update guidance](https://developer.chrome.com/docs/webstore/update/)).
-14. Hand the corporate security team the ID for force-install, plus the package from `chrome-extension-enterprise-trust.md`.
+**F. Signed future updates — H3**
+15. After the item is public and custody/recovery are tested, read and capture the live Verified Uploads warning. Treat opt-in as irreversible; the human personally opts in and registers only the public key. Public guidance confirms all future package uploads require signatures after opt-in ([update guidance](https://developer.chrome.com/docs/webstore/update/)).
 
 ## Sources
 

@@ -1,60 +1,69 @@
 direction: down
 
 title: |md
-  **First submission — order of work**
+  **First submission — exact artifact to public release**
 |
 
 prep: {
-  label: "**A. Before the dashboard**"
+  label: "**A. Release preparation**"
   style.fill: "#e8f0fe"
-  rename: "Rename to AI Tab Grant"
-  icons: "Icons 16/32/48/128"
-  pkg: "npm run package -> ZIP"
-  helper: "Explain missing helper + public setup"
-  test: "Test exact ZIP in a clean profile"
+  rename: "Confirm name + rename"
+  assets: "Icons + screenshots + promo"
+  pkg: "Deterministic bootstrap/final packaging"
+  helper: "Missing-helper UX + public setup"
 }
 
 account: {
-  label: "**B. Account**"
+  label: "**B. H1 — Account + identity bootstrap**"
   style.fill: "#fef7e0"
-  reg: "Register, pay one-time fee"
-  mail: "Dedicated address, cannot be changed"
-}
-
-draft: {
-  label: "**C. Draft item**"
-  style.fill: "#e6f4ea"
-  up: "Upload ZIP, do not submit"
+  profile: "Publisher name + verified contact email"
+  reg: "Strong auth, register, pay fee"
+  bootstrap: "Upload V_bootstrap (not release)"
   key: "Package -> View public key"
-  pin: "Pin key, rebuild, reinstall host"
 }
 
-listing: {
-  label: "**D. Listing**"
-  style.fill: "#f3e8fd"
-  copy: "Description, 132-char summary"
-  shots: "Screenshots 1280x800"
-  promo: "Required promo 440x280"
-  privacy: "Policy URL + disclosures"
-  perms: "Justify every permission"
-  notes: "Reviewer notes + screencast"
+final: {
+  label: "**C. Build and lock final artifact**"
+  style.fill: "#e6f4ea"
+  pin: "Pin Store key + verify item ID"
+  version: "Build V_final > V_bootstrap"
+  host: "Regenerate native-host allowlist"
+  rehearse: "Rehearse one locked ZIP + hash"
 }
 
 submit: {
-  label: "**E. Submit**"
+  label: "**D. H2a — Exact upload + deferred submission**"
+  style.fill: "#f3e8fd"
+  upload: "Upload New Package: locked final ZIP"
+  verify: "Dashboard version = V_final"
+  listing: "Listing + privacy + reviewer packet"
+  defer: "Submit for Review; disable auto-publish"
+}
+
+review: {
+  label: "**E. Review**"
   style.fill: "#fde8e8"
-  go: "Submit for review"
   wait: "Plan: days to a few weeks"
+  reject: "Reject -> fix, increment, rehearse, re-upload"
+  approve: "Approve -> staged / ready to publish"
+}
+
+publish: {
+  label: "**F. H2b — Manual publication**"
+  style.fill: "#e8f0fe"
+  expiry: "Record live expiry (up to 30 days today)"
+  check: "Recheck version + listing"
+  go: "Human clicks Publish"
+  proof: "Verify public URL + version"
 }
 
 after: {
-  label: "**F. After approval**"
-  style.fill: "#e8f0fe"
-  crx: "Opt in Verified CRX Uploads"
-  ent: "Corp force-install by ID"
+  label: "**G. H3 — Signed future updates**"
+  style.fill: "#fef7e0"
+  custody: "Test key custody + recovery"
+  warning: "Read warning; treat opt-in irreversible"
+  crx: "Human opts in; future uploads signed"
 }
 
-prep -> account -> draft -> listing -> submit -> after
-
-draft.pin -> prep.pkg: "rebuild with real ID"
-submit.wait -> listing: "on rejection, fix and resubmit"
+prep -> account -> final -> submit -> review -> publish -> after
+review.reject -> final: "new higher version"

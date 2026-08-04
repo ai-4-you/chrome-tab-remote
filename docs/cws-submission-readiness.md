@@ -6,7 +6,7 @@
 
 ## Conclusion
 
-Seven things block a submission. D1 (Verified CRX Uploads after initial approval) is settled. The existing analysis recommends "AI Tab Grant" as the working name; final confirmation is batched into the canonical plan's short pre-Stage-2 decision reply. The exact blockers are:
+Seven product/package things block a submission. D1 (Verified CRX Uploads after the initial item is public) is settled as a future-update control. The existing analysis recommends "AI Tab Grant" as the working name; final confirmation is batched into the canonical plan's short pre-Stage-2 decision reply. The exact blockers are:
 
 1. **B1 — Confirm and implement the Store-facing name.** "AI Tab Grant" is the recommended working default; after confirmation, update the manifest, notifications, and agent-facing strings.
 2. **B2 — Publish accurate privacy material.** Host the policy publicly and complete disclosures for page content, URLs, local audit data, the localhost helper, and downstream MCP-client handling.
@@ -14,7 +14,9 @@ Seven things block a submission. D1 (Verified CRX Uploads after initial approval
 4. **B4 — Finalize permission justifications.** Map every manifest permission and broad optional host pattern to verified code usage and the single purpose.
 5. **B5 — Produce compliant listing assets.** Verify icon padding; create exact-size screenshots and the required 440×280 promo image; add missing toolbar icons.
 6. **B6 — Align the permanent Store ID.** Obtain the dashboard public key, verify local/dashboard IDs, and regenerate native-host `allowed_origins`.
-7. **B7 — Produce a deterministic, correctly versioned artifact.** Unify the version source, generate the Store ZIP/CRX through reviewed commands, and fail closed on unexpected contents.
+7. **B7 — Produce and upload a deterministic, correctly versioned artifact.** Unify the version source; use an identity-bootstrap ZIP only to obtain the Store key; build/rehearse a strictly higher final version; explicitly replace the dashboard package with that exact ZIP before review; and fail closed on unexpected contents.
+
+Separate H1 prerequisite: complete required publisher name and contact-email verification, plus owner/recovery/strong-authentication setup, before dashboard submission work.
 
 ## Diagram
 
@@ -28,10 +30,11 @@ Package updates will be signed with a publisher-controlled 2048-bit RSA key, so 
 
 Sequencing consequences:
 
-- The **first** upload is still a ZIP. Opt-in lives on the dashboard's Package tab and applies to an item that already exists.
-- After opt-in, **every** update must be a signed `.crx` — this changes B7 from "produce a ZIP" to "produce a signed CRX".
+- Initial publication uses ZIP uploads. Opt-in is deferred until the first item is public and key custody/recovery are tested.
+- After opt-in, **every** future package update must be a signed `.crx`.
 - The private key must not live in the Google account it protects. Escrow location is an open question.
-- Losing the key requires CWS support intervention, up to one week. Treat it as a high-value release credential with a documented recovery path.
+- Treat the opt-in as irreversible and never automate it. The human must read/capture the live Package-tab warning and acknowledge it before personally clicking Opt in. Public docs fetched for this plan establish the future-signing requirement but do not clearly document a disable path; the live warning is authoritative.
+- Treat the key as a high-value release credential. Before opt-in, capture and test the current lost-key escalation instructions; the public update page fetched for this plan does not establish recovery timing.
 - Google states that verified uploads are checked with the publisher key and then repackaged with the existing Store key, preserving the extension ID. Still verify ID parity as a release gate because native messaging fails if `allowed_origins` drifts.
 
 Source: [Update your Chrome Web Store item](https://developer.chrome.com/docs/webstore/update/)
@@ -120,11 +123,13 @@ Google's [image requirements](https://developer.chrome.com/docs/webstore/images)
 
 Resolution: upload the ZIP as an unpublished draft → **Package → View public key** → replace the current `key` value with the store's → rebuild. Dev and production then share one ID and one `allowed_origins` entry.
 
-### B7 — No deterministic packaging or unified version source
+### B7 — No deterministic packaging, unified version source, or exact replacement upload
 
 `dist/` is gitignored and there is no script producing a submission artifact. Hand-zipping risks shipping the wrong tree. Version metadata also drifts: `manifest.json` says `0.1.0`, while `packages/extension/package.json` says `0.0.0`.
 
-Per D1 the release path needs two modes: a correctly versioned ZIP for the initial draft upload and a signed `.crx` for updates after Verified CRX Uploads is enabled. Implementation candidate—not yet verified in this repository: sign with Chrome's pack-extension flags or a reviewed CRX3 library. The key path must come from protected release configuration, never the repo.
+The first dashboard upload is an identity bootstrap, not the release candidate. After pinning the Store public key, packaged content changes: Google's update guidance requires a new upload with a strictly larger version. The final path is bootstrap ZIP → Store key → higher-version final ZIP → exact-artifact rehearsal → **Upload New Package** → verify dashboard final version → submit deferred.
+
+After Verified Uploads opt-in, future updates become signed `.crx` uploads. Implementation candidate—not yet verified in this repository: sign with Chrome's pack-extension flags or a reviewed CRX3 library. The key path must come from protected release configuration, never the repo.
 
 ## Should-fix
 
