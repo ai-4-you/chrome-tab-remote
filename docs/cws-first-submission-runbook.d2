@@ -1,0 +1,60 @@
+direction: down
+
+title: |md
+  **First submission — order of work**
+|
+
+prep: {
+  label: "**A. Before the dashboard**"
+  style.fill: "#e8f0fe"
+  rename: "Rename to AI Tab Grant"
+  icons: "Icons 16/32/48/128"
+  pkg: "npm run package -> ZIP"
+  helper: "Explain missing helper + public setup"
+  test: "Test exact ZIP in a clean profile"
+}
+
+account: {
+  label: "**B. Account**"
+  style.fill: "#fef7e0"
+  reg: "Register, pay one-time fee"
+  mail: "Dedicated address, cannot be changed"
+}
+
+draft: {
+  label: "**C. Draft item**"
+  style.fill: "#e6f4ea"
+  up: "Upload ZIP, do not submit"
+  key: "Package -> View public key"
+  pin: "Pin key, rebuild, reinstall host"
+}
+
+listing: {
+  label: "**D. Listing**"
+  style.fill: "#f3e8fd"
+  copy: "Description, 132-char summary"
+  shots: "Screenshots 1280x800"
+  promo: "Required promo 440x280"
+  privacy: "Policy URL + disclosures"
+  perms: "Justify every permission"
+  notes: "Reviewer notes + screencast"
+}
+
+submit: {
+  label: "**E. Submit**"
+  style.fill: "#fde8e8"
+  go: "Submit for review"
+  wait: "Plan: days to a few weeks"
+}
+
+after: {
+  label: "**F. After approval**"
+  style.fill: "#e8f0fe"
+  crx: "Opt in Verified CRX Uploads"
+  ent: "Corp force-install by ID"
+}
+
+prep -> account -> draft -> listing -> submit -> after
+
+draft.pin -> prep.pkg: "rebuild with real ID"
+submit.wait -> listing: "on rejection, fix and resubmit"

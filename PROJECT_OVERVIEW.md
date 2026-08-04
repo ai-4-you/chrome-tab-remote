@@ -1,13 +1,13 @@
 # PROJECT_OVERVIEW — chrome-tab-remote
 
-> as-of: 2026-08-02 · phase: **Stages 1–2 + assist features implemented, live-verified (Chrome + Brave), externally reviewed, MIT-licensed — public-release ready; 231 tests**
+> as-of: 2026-08-04 · phase: **product behavior implemented and live-verified (Chrome + Brave); source-release ready, Chrome Web Store publication planning active; 231 tests**
 
 ## Current state
 
 - **Stage 1 implemented** per `plan.md`: npm-workspaces monorepo (`packages/shared` zod contracts, `packages/extension` MV3, `packages/host` native-messaging bridge + MCP server on `127.0.0.1:8917`). 146 unit tests, `./precommit.sh` (typecheck + lint + test + audit) green, builds verified. Human-first `README.md` with manual-test walkthrough.
 - **Agent-ergonomics package (2026-08-02, benchmarked against Vercel agent-browser):** `tab_snapshot` `filter: interactive|full`; link `href`s (http/https, capped 300); compact indented-text MCP output via shared `renderSnapshot` (replaces JSON tree — smoke script updated to parse it); optional `grantId` defaulting to the single grant (resolved in the extension router, audited with the resolved id); per-error-code recovery instructions (`ERROR_RECOVERY`) appended to MCP errors; workflow-teaching tool descriptions. Polish round after live review: truncated names/hrefs carry a trailing `…` marker, and nameless interactive elements fall back to placeholder / inner img alt / title. Format alignment: ALL tool results are prose-shaped per the AGENTS.md principle — `tab_read` plain text, `list_grants` one line per grant with derived expiry minutes (empty list → recovery instruction). Deferred (ranked in `plan.md` §2.2): `tab_find`, snapshot ids/`stale_ref`, subtree scoping, `wait_for`/diffs; **Stage 2 prerequisite noted: expose `<select>` options before building `select(ref, value)`.**
 - Multi-agent review ran (security / correctness / quality lenses); 8 confirmed findings fixed, incl. DNS-rebinding protection on the MCP endpoint, informed re-confirm (origin shown to user), alarm-based native-port reconnect (MV3 SW lifetime), oversized-frame desync handling. 16 lower-severity findings were **not** verified/fixed (capped) — candidates for a second review round.
-- Design in `plan.md` (approved 2026-08-02); idea in `IDEA.md`; research in `RESEARCH.md`; reference analysis in `docs/chrome-tracker-takeaways.md`.
+- Design in `plan.md` (approved 2026-08-02); idea in `IDEA.md`; research in `RESEARCH.md`; reference analysis in `docs/chrome-tracker-takeaways.md`; canonical Chrome Web Store path in `docs/cws-signed-publishing-plan.md` (planning only — no submission started).
 - Known limitations: **MCP endpoint has no authentication** — any local process can reach `127.0.0.1:8917` (DNS-rebinding protection exists; token auth is the top Stage 2 hardening item); host must run in-repo (no single binary yet); install script macOS-only; content-script bundle ~135 kB (zod via shared barrel).
 
 ## Current state (Stage 2, 2026-08-02)
@@ -41,12 +41,15 @@
 - Which concrete actions must the MVP support (read/extract vs click/type/navigate)?
 - Mandatory enterprise controls: allowlists, audit log, SSO, data residency, DLP?
 - Reuse an OSS base (nanobrowser closest) or build minimal from scratch for auditability?
-- Distribution: Chrome Web Store vs enterprise policy install — affects permission strategy.
+- Publication execution: public Chrome Web Store v1 is selected; enterprise policy force-install remains compatible, while enterprise certification/native-host productisation is a separate track.
 
-## Blockers
+## Chrome Web Store blockers (planning state, 2026-08-04)
 
-- None external; next step is the MVP RFC (decision work, not code).
+- `./precommit.sh` is red because the dependency audit reports the Hono ReDoS advisory; 231 tests, typecheck, and lint remain green.
+- Deterministic Store packaging/verifier, unified versioning, compliant listing assets, public privacy policy, reviewer-safe missing-helper UX, reviewer helper distribution, permanent Store ID alignment, and future signing-key custody remain undone.
+- Execution order, evidence gates, automation boundaries, and minimal human batches are canonical in `docs/cws-signed-publishing-plan.md`.
+- No account, dashboard item, signing key, submission, or publication has been created by this planning work.
 
 ## Doc map
 
-`AGENTS.md` (durable rules) · `REQUIREMENTS.md` (canonical numbered requirements, status + traceability) · `IDEA.md` (north star) · `RESEARCH.md` (dated research log) · `docs/chrome-tracker-takeaways.md` (+ `.d2`/`.svg` diagram)
+`AGENTS.md` (durable rules) · `REQUIREMENTS.md` (canonical numbered requirements, status + traceability) · `IDEA.md` (north star) · `RESEARCH.md` (dated research log) · `docs/cws-signed-publishing-plan.md` (canonical Store release plan) · `docs/chrome-tracker-takeaways.md` (+ `.d2`/`.svg` diagram)

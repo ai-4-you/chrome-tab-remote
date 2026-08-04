@@ -8,7 +8,7 @@ AI agents are getting good at working with web pages, but today's options force 
 
 Chrome Tab Remote takes a third path, built on one conviction: **trust is the product.** You point at a single tab and say "this one". The agent can then read that tab — and only that tab — until the grant expires, the tab navigates somewhere else, or you hit Revoke. Everything the agent does is written to an audit trail you can inspect.
 
-The goal is an extension so small, so boring, and so reviewable that a security-conscious company could actually approve it. No tracking, no data collection, no cloud service, no AI inside the extension — just a strict, visible consent boundary between your browser and whatever agent you connect.
+The goal is an extension so small, so boring, and so reviewable that a security-conscious company could actually approve it. This project includes no tracking, analytics, bundled AI, or vendor-operated cloud service — just a strict, visible consent boundary between your browser and whatever agent you connect. Granted data crosses the local helper's localhost MCP endpoint; a user-selected MCP client or AI service may process or transmit it under that service's own settings and terms.
 
 ## What it does (and refuses to do)
 
@@ -29,7 +29,7 @@ The side panel is scoped to the tab you're looking at — here the user is on he
 
 ![Architecture](./docs/solution-architecture.svg)
 
-Chrome extension (your consent UI + enforcement) → native messaging → a small local helper process → MCP server on `http://127.0.0.1:8917/mcp` (localhost only, DNS-rebinding protected). Design details and roadmap: [plan.md](./plan.md).
+Chrome extension (your consent UI + enforcement) → native messaging → a small local helper process → MCP server on `http://127.0.0.1:8917/mcp` (localhost only, DNS-rebinding protected) → the MCP client the user chooses. The shipped extension/helper do not contact a project-operated cloud service; downstream client or AI-service handling is outside this project's control. Design details and roadmap: [plan.md](./plan.md).
 
 One design principle shapes everything the tools return: **the consumer is a language model, so prose-shaped output is the machine format.** Snapshots arrive as compact indented text rather than JSON trees, and errors state the concrete next step ("ask the user to re-confirm in the side panel") instead of just a diagnosis.
 

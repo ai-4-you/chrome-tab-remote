@@ -7,9 +7,9 @@
 ## 1. Product intent (north star)
 
 - **N-1** One user-selected tab — never "the browser". The user points at exactly one tab; everything else is invisible to the agent.
-- **N-2** Trust is the product: small, boring, reviewable, corporate-approvable. No tracking, no cloud service, no AI inside the extension.
+- **N-2** Trust is the product: small, boring, reviewable, corporate-approvable. No tracking, no bundled AI, and no project-operated cloud service. Granted data is exposed through the local helper's localhost MCP endpoint; a user-selected MCP client or AI service may process or transmit it under that service's own configuration and terms.
 - **N-3** Standards over invention: WebExtensions/MV3, MCP, ARIA semantics, WebDriver-BiDi-aligned action vocabulary, JSON Schema (zod).
-- **N-4** Local-first: everything runs on the user's machine. **Decision 2026-08-02:** MCP endpoint auth is *deprioritized* — deployment is fully local; localhost binding + DNS-rebinding protection are the accepted boundary for now.
+- **N-4** Local-first: all components shipped by this project run on the user's machine. The separately chosen MCP client may use an external service and is outside this project's runtime boundary. **Decision 2026-08-02:** MCP endpoint auth is *deprioritized* — the extension/helper deployment is local; localhost binding + DNS-rebinding protection are the accepted boundary for now.
 - **N-5** Page content is **untrusted input**: page-derived text is data, never instructions. Injection defense on the agent side is the backend's duty; origin-pinning and (in Stage 2) the approval gate cap the blast radius of a successful injection.
 
 ## 2. Consent & grant (the trust boundary) — implemented

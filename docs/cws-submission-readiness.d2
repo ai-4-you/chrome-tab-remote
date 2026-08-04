@@ -1,0 +1,58 @@
+direction: down
+
+title: |md
+  **Chrome Web Store submission — readiness flow**
+|
+
+decide: {
+  label: "**1. Decide**"
+  style.fill: "#fde8e8"
+  name: "Confirm working name: AI Tab Grant"
+  policy: "Privacy policy hosting"
+  reviewer: "Reviewer helper + missing-helper UX"
+}
+
+package: {
+  label: "**2. Make the package submittable**"
+  style.fill: "#e8f0fe"
+  icons: "Icon set 16/32/48/128"
+  version: "Single version source"
+  zip: "npm run package -> submission ZIP"
+  key: "Resolve manifest key"
+}
+
+listing: {
+  label: "**3. Write the listing**"
+  style.fill: "#e6f4ea"
+  purpose: "Single purpose statement"
+  perms: "Justification per permission"
+  privacy: "Privacy policy + data disclosures"
+  shots: "Screenshots 1280x800 + promo 440x280"
+  test: "Reviewer instructions + screencast"
+}
+
+draft: {
+  label: "**4. Draft upload**"
+  style.fill: "#fef7e0"
+  upload: "Upload ZIP, do not publish"
+  pubkey: "Package tab -> View public key"
+  pin: "Pin key into manifest"
+}
+
+submit: {
+  label: "**5. Public first submission**"
+  style.fill: "#f3e8fd"
+  visibility: "Visibility = public"
+  review: "Human certifies + submits"
+}
+
+after: {
+  label: "**6. After approval**"
+  style.fill: "#e8f0fe"
+  crx: "Opt in: Verified CRX Uploads"
+  custody: "Protect + test signing-key recovery"
+}
+
+decide -> package -> listing -> draft -> submit -> after
+
+draft.pin -> package.zip: "rebuild ZIP with pinned key"

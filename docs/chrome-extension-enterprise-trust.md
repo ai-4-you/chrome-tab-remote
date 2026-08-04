@@ -1,7 +1,8 @@
 # Chrome Extension Marketplace and Enterprise Trust
 
-> Researched: 2026-08-02
+> Researched: 2026-08-02 · project distribution decision clarified 2026-08-04
 > Scope: signing, Chrome Web Store publication, enterprise deployment, permissions, privacy, and the native messaging host.
+> Project decision: v1 uses a **public Web Store listing** per the canonical [signed-publishing plan](./cws-signed-publishing-plan.md). Private/domain publication below remains an enterprise option, not the chosen v1 route.
 
 ## Conclusion
 
@@ -154,8 +155,10 @@ Before requesting organizational approval, prepare:
 9. Support and incident-response contacts.
 10. A clear statement of the local MCP authentication limitation.
 
-## Recommended distribution decision
+## Distribution guidance and project decision
 
-For a single organization, prefer **private/domain-published Web Store distribution with Chrome Enterprise policy deployment**. For multiple customer organizations, use approved organization publishing where available. Use public publication only when broad distribution is an actual product requirement.
+General enterprise guidance remains: for a single organization, private/domain-published Web Store distribution with Chrome Enterprise policy deployment can reduce visibility; for multiple customer organizations, approved organization publishing may fit where available.
+
+**Project decision for v1:** publish publicly. This keeps broad installation and managed force-install by ID available. It does not make the native helper enterprise-ready or replace customer security review.
 
 In all cases, treat the separately signed native host and its installer as an equally important approval surface.
