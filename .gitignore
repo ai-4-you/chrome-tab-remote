@@ -6,3 +6,5 @@ dist/
 .codegiant/
 cg-task-result-*.md
 .scan-results/
+.pi/goals/
+.pi-subagents/
