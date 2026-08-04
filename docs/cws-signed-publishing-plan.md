@@ -3,6 +3,8 @@
 > **Canonical publication plan** · as-of 2026-08-04 · status: **planning; no submission started**
 >
 > Scope: public Chrome Web Store publication of the extension, permanent Store-ID alignment with the native host, and signed future updates through Verified CRX Uploads. Full enterprise certification and cross-platform native-host productisation remain a separate delivery track.
+>
+> Traceability boundary: this is a release-process plan, not a new runtime capability, so it adds no numbered `REQUIREMENTS.md` behavior IDs. Any later implementation that changes permissions, consent, data flow, or runtime behavior must update `REQUIREMENTS.md` in the same commit.
 
 ## Outcome
 
@@ -19,6 +21,7 @@ The extension is functionally mature, but the release path is not ready.
 | Product behavior | 231/231 tests pass; typecheck and lint pass | Ready baseline |
 | Dependency gate | `./precommit.sh` fails because `hono <4.12.34` has a moderate ReDoS advisory | **Blocking** |
 | Distribution decision | Existing 2026-08-02 analysis selected a public listing; enterprise policy can still force-install a public item by ID | Decided for v1 |
+| Publisher identity | No permanent publisher account owner, recovery arrangement, or strong-authentication evidence is recorded | Confirm in H1 |
 | Store-facing name | Existing 2026-08-02 analysis selected **AI Tab Grant**; explicit current-user confirmation is not recorded, and code still says Chrome Tab Remote | Confirm in the pre-Stage-2 decision reply |
 | Package | Build exists; no deterministic submission ZIP command or artifact verifier | **Blocking** |
 | Version | Manifest is `0.1.0`; extension package is `0.0.0` | **Blocking** |
@@ -89,7 +92,7 @@ Target: 20–30 focused minutes after all draft artifacts are ready.
 
 The human:
 
-1. signs into the permanent, dedicated publisher Google account;
+1. confirms the permanent publisher-account owner, monitored address, recovery method, and strong authentication, then signs in;
 2. accepts Google’s developer agreement and pays the one-time fee;
 3. creates the draft item and uploads the prepared draft ZIP;
 4. copies the dashboard Item ID and **Package → View public key** into a local handoff file or directly into the guided terminal prompt.
@@ -133,6 +136,7 @@ The private key never enters the repository, chat, logs, screenshots, or ordinar
 | Inspect ZIP allowlist, hashes, sizes, manifest, remote-code indicators | Script/CI | Full | Fails closed on mismatch |
 | Generate listing/privacy/reviewer-copy drafts | Agent | High | Human reviews legal/data claims |
 | Generate screenshot capture checklist and validate dimensions | Agent/script | High | Human may help with visual capture if browser automation is insufficient |
+| Choose publisher owner, recovery, and strong authentication | Human | None | Never automated or inferred |
 | Create Store account and pay fee | Human | None | Never automated |
 | Accept developer agreement or limited-use certification | Human | None | Never automated |
 | Upload first draft and retrieve Store public key/ID | Human, agent-guided | Low | Dashboard credentials remain human-controlled |
@@ -429,6 +433,8 @@ Automation must fail closed. A red verifier blocks the release; it must never re
 
 | Blocker | Release impact | Resolution stage | Owner |
 |---|---|---|---|
+| Final Store name, policy host, and reviewer-helper fallback unconfirmed | Blocks Stage 2 implementation | Pre-Stage-2 reply | Human; agent supplies defaults |
+| Permanent publisher owner/recovery/strong authentication unconfirmed | Blocks H1 dashboard work | H1 | Human only |
 | Hono moderate ReDoS advisory | Precommit/release gate red | 1 | Agent after approval |
 | No deterministic package/verifier | Cannot prove submitted artifact | 1 | Agent after approval |
 | Version drift | Wrong/ambiguous release version | 1 | Agent after approval |
