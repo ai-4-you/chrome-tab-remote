@@ -95,7 +95,7 @@ The granted tab is exposed as an **MCP (Model Context Protocol) server** with th
 
 Transport: the extension connects to a **native messaging host** (small local process, installed alongside the extension) which runs the MCP server (stdio, later streamable HTTP). Chain: `agent ⇄ MCP ⇄ native host ⇄ runtime port ⇄ extension ⇄ content script`.
 
-A remote/SaaS backend is a later variant: the same extension core instead maintains an *outbound* authenticated WebSocket — the grant, lifecycle, and approval concepts are transport-independent. Local-first is the MVP because it needs no server infrastructure and keeps page content on the machine.
+A remote/SaaS backend is a later variant: the same extension core instead maintains an *outbound* authenticated WebSocket — the grant, lifecycle, and approval concepts are transport-independent. Local-first is the MVP because the components shipped here need no server infrastructure. Granted content still reaches the user-selected MCP client, which may use an external model or service under its own configuration and terms.
 
 ### 2.5 Operation lifecycle + approval gate
 

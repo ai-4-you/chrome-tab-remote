@@ -7,9 +7,9 @@
 
 ## Conclusion
 
-Publishing publicly is the right call and it does **not** cost you the corporate goal: an admin can force-install any public Web Store extension by its ID, so the enterprise path stays open without private/domain publishing.
+Publishing publicly is the selected project route. Chrome Enterprise supports managed installation of approved Store extensions ([Google Admin help](https://support.google.com/chrome/a/answer/6306504)), so a public item can still participate in the separate enterprise deployment path by Store ID.
 
-Google says most reviews complete within a few days but some take up to a few weeks. This item combines several closer-review signals: a new developer/item, sensitive permissions, and broad optional host patterns. Use **days to a few weeks** as a planning buffer, not a promised range. The largest project-specific rejection risk is that a reviewer installs it, sees nothing happen without the native host, and reads that as broken functionality.
+Google's [review-process guidance](https://developer.chrome.com/docs/webstore/review-process) says most reviews complete within a few days but some take up to a few weeks, and names new developers/items, dangerous permissions, broad host patterns, and hard-to-review code as closer-review signals. This item has several of those signals. Use **days to a few weeks** as a planning buffer, not a promised range. The largest project-specific rejection risk is that a reviewer installs it, sees nothing happen without the native host, and reads that as broken functionality.
 
 The remaining work is explicit in the canonical plan; none of it should be treated as complete until its evidence gate passes.
 
@@ -19,9 +19,9 @@ The remaining work is explicit in the canonical plan; none of it should be treat
 
 ## Primary project-specific rejection risk
 
-Broken functionality is a documented Chrome Web Store violation category (*Yellow Magnesium*). Google’s troubleshooting guidance says to test the exact files submitted to the Store rather than only a separate local development build. For this project, the external native-helper dependency makes reviewer-visible non-functionality the primary identified submission risk.
+Broken functionality is a documented Chrome Web Store violation category (*Yellow Magnesium*). Google's [troubleshooting guidance](https://developer.chrome.com/docs/webstore/troubleshooting) says to test the exact files submitted to the Store rather than only a separate local development build. For this project, the external native-helper dependency makes reviewer-visible non-functionality the primary identified submission risk.
 
-A reviewer on a clean machine has no native host. Today the side panel would let them create a grant and then nothing would happen. That reads as broken.
+**Planning assumption:** a clean reviewer environment will not already have this project's native host. Today the side panel would let the reviewer create a grant and then no agent could connect, which can reasonably appear broken.
 
 Three mitigations, in order of value:
 
@@ -70,7 +70,7 @@ Full source, including the native host: <repo link>
 
 ## Rejection buckets, mapped to this project
 
-Google's documented categories, and where we stand:
+Google's documented violation categories ([troubleshooting guidance](https://developer.chrome.com/docs/webstore/troubleshooting)), followed by this project's current exposure assessment:
 
 | Bucket | Notification | Our exposure |
 |---|---|---|
@@ -81,7 +81,7 @@ Google's documented categories, and where we stand:
 | Missing privacy policy | Purple Lithium | **Blocking** — none exists. Must be a URL in the Privacy tab field, not in the description. |
 | Keyword stuffing | Yellow Argon | Low — avoid listing every site it "works on". |
 | Single purpose | Red Magnesium / Copper / Lithium / Argon | Low — one purpose, cleanly stated. |
-| Remote code | Blue Argon | **None** — esbuild bundles everything, `sourcemap: false`, no `eval`. Declare "no remote code"; it shortens review. |
+| Remote code | Blue Argon | **None found in current build analysis** — esbuild bundles everything, `sourcemap: false`, no `eval`. Declare "no remote code" accurately; Google's [Privacy practices guidance](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy) says remote code receives extra scrutiny. |
 
 ## Permission justifications
 
@@ -99,9 +99,11 @@ One per manifest entry. Reviewers compare these against actual code.
 | `alarms` | Reconnects the native port after the MV3 service worker is terminated. |
 | `optional_host_permissions: http://*/*, https://*/*` | **Never requested at install.** Requested at runtime for the single origin the user is granting, and dropped on revoke. Declared broadly only because the user may grant any site. |
 
-That last row is the one to write most carefully — broad host patterns are documented as substantially lengthening review. The mitigating facts (no install-time host access, per-origin runtime request, revocable, no `content_scripts`) should all appear.
+That last row is the one to write most carefully: Google's [review-process guidance](https://developer.chrome.com/docs/webstore/review-process) says broad host patterns can lengthen review. The mitigating facts (no install-time host access, per-origin runtime request, revocable, no `content_scripts`) should all appear.
 
 ## Assets and copy
+
+Dimensions and required/optional status below follow Google's [image requirements](https://developer.chrome.com/docs/webstore/images); repository status comes from the 2026-08-04 asset inspection.
 
 | Asset | Spec | Status |
 |---|---|---|
@@ -111,7 +113,7 @@ That last row is the one to write most carefully — broad host patterns are doc
 | Marquee | 1400×560 | Optional; required only to be eligible for featuring |
 | Toolbar icons | 16/32/48 | **Missing** — only 128 exists |
 
-Copy rules: summary caps at 132 characters; open the detailed description with one concise sentence stating what it does; list features plainly; no keyword lists.
+Per Google's [Store listing fields](https://developer.chrome.com/docs/webstore/cws-dashboard-listing), the summary caps at 132 characters. Project copy guidance: open the detailed description with one concise purpose sentence, list features plainly, and avoid keyword lists.
 
 Draft summary to refine:
 
@@ -121,7 +123,7 @@ That is 118 characters and states the purpose without claiming to be an AI.
 
 ## Privacy policy
 
-Required, because the extension handles page content and tab URLs. Must be a working public URL in the dedicated Privacy tab field — a link inside the description is itself a documented rejection cause.
+Google's [Privacy practices guidance](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy) requires the dashboard privacy fields, disclosures, and a privacy-policy link. Because this extension handles granted page content and tab URLs, the plan treats a working public policy URL as blocking. Use the dedicated Privacy tab rather than relying on a description link.
 
 Must honestly cover: page content read under an active grant, tab URLs, the local append-only audit log, transfer to the localhost companion helper, and exposure through the localhost MCP endpoint. The extension/helper do not contact a vendor cloud, but the policy must state that a user-selected MCP client or AI service may process or transmit tool results under its own configuration and terms. Error logs and anonymous usage statistics also count as data collection; this project currently has neither.
 
@@ -133,7 +135,7 @@ Called out separately because it silently breaks the reviewer's install.
 
 The native host manifest's `allowed_origins` must list the **published** extension ID. Today `packages/extension/manifest.json:5` pins a development key, and `install-native-host.mjs` registers whatever ID that produces. If the installer a reviewer downloads registers the development ID, the store-installed extension cannot connect — which presents as broken functionality.
 
-Sequence that avoids it: upload the ZIP as an unpublished draft → **Package → View public key** → pin that key into the manifest → rebuild → regenerate the host installer against the resulting ID → only then submit.
+Google's [`manifest.key` guidance](https://developer.chrome.com/docs/extensions/reference/manifest/key) documents draft upload → **Package → View public key** → add the public key to the manifest → compare local and dashboard IDs. Project continuation: rebuild and regenerate the host installer against that verified ID before submission.
 
 ## Ordered checklist
 
@@ -146,7 +148,7 @@ Sequence that avoids it: upload the ZIP as an unpublished draft → **Package �
 6. Install the produced ZIP in a clean Chrome profile and exercise it end to end.
 
 **B. Account**
-7. Register the developer account with a dedicated address you monitor — it cannot be changed later, and rejection notices go there.
+7. Register with a dedicated monitored address. Google's [registration guidance](https://developer.chrome.com/docs/webstore/register) says the account email cannot be changed in place; changing identity requires a new account and item transfer.
 
 **C. Draft item**
 8. Upload the ZIP without submitting; pull the public key; pin it; rebuild; regenerate the host installer.
@@ -160,7 +162,7 @@ Sequence that avoids it: upload the ZIP as an unpublished draft → **Package �
 **E. Submit** — then plan for days to a few weeks, without treating that range as a commitment. If rejected, use Google’s notice and official troubleshooting guidance to make a concrete correction, regenerate the evidence, and resubmit.
 
 **F. After approval**
-13. Opt into Verified CRX Uploads (D1) — all later updates become signed CRX uploads.
+13. After approval and custody preparation, opt into Verified CRX Uploads; Google then requires future uploads to be signed by the registered publisher key ([update guidance](https://developer.chrome.com/docs/webstore/update/)).
 14. Hand the corporate security team the ID for force-install, plus the package from `chrome-extension-enterprise-trust.md`.
 
 ## Sources

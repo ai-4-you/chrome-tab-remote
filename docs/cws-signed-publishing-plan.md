@@ -30,13 +30,13 @@ The extension is functionally mature, but the release path is not ready.
 | Privacy | No public policy URL or finalized dashboard disclosures | **Blocking** |
 | Listing assets | 128×128 icon exists; its artwork padding is unverified. Existing screenshot is 1322×1630, not an accepted Store screenshot size. Required 440×280 promo image is absent | **Blocking** |
 | Signing | Verified CRX Uploads selected for future updates; private-key custody is undecided | Post-first-publication gate |
-| Planning state | Canonical plan and reconciled CWS companion documents are committed in `6acc21d` and `39d7f29`; no publication implementation has started | Stage 0 complete |
+| Planning state | Canonical plan and reconciled CWS companion documents are committed; semantic reconciliation is complete; no publication implementation has started | Stage 0 complete |
 
 ## Fixed principles and corrected assumptions
 
-1. **Public v1; enterprise remains separate.** A public item preserves managed force-install by ID. Store review is distribution/policy evidence, not enterprise certification.
-2. **The first submission is a ZIP.** Verified CRX Uploads protects future uploads and should not delay initial publication.
-3. **Two different keys exist.** Do not conflate them:
+1. **Public v1; enterprise remains separate.** Chrome Enterprise supports managed installation of approved Store items ([Google Admin help](https://support.google.com/chrome/a/answer/6306504)), so public v1 preserves a force-install path by ID. Store review is distribution/policy evidence, not enterprise certification.
+2. **The first submission is a ZIP.** Google's [publish guidance](https://developer.chrome.com/docs/webstore/publish) documents the ZIP package, while [Verified Uploads guidance](https://developer.chrome.com/blog/verified-uploads-cws) applies publisher-key verification to future uploads. Therefore signing-key custody should not delay the initial submission path.
+3. **Two different keys exist.** Google's [`manifest.key` guidance](https://developer.chrome.com/docs/extensions/reference/manifest/key) covers the Store item identity key; [Verified Uploads guidance](https://developer.chrome.com/blog/verified-uploads-cws) covers the publisher-controlled future-upload key. Do not conflate them:
 
    ```text
    Chrome Web Store item key
@@ -54,8 +54,8 @@ The extension is functionally mature, but the release path is not ready.
    - extension ID remains unchanged
    ```
 
-4. **Review time is not a commitment.** Google says most reviews complete within a few days but some take up to a few weeks. New developers/extensions, broad host permissions, sensitive permissions, and hard-to-review code can increase review time. Use “days to a few weeks” only as a planning buffer.
-5. **The 440×280 promotional image is required.** Google’s current image page requires the 128×128 icon, a small 440×280 promotional image, and at least one 1280×800 or 640×400 screenshot.
+4. **Review time is not a commitment.** Google's [review-process guidance](https://developer.chrome.com/docs/webstore/review-process) says most reviews complete within a few days but some take up to a few weeks, and lists new developers/extensions, dangerous permissions, broad host patterns, and hard-to-review code as closer-review signals. Use “days to a few weeks” only as a planning buffer.
+5. **The 440×280 promotional image is required.** Google's [image requirements](https://developer.chrome.com/docs/webstore/images) require the 128×128 icon, a small 440×280 promotional image, and at least one 1280×800 or 640×400 screenshot.
 6. **Local bridge does not mean guaranteed local downstream processing.** The extension communicates with the local native helper and does not itself embed an AI or vendor cloud service. The user-selected MCP client may forward tool results to an external model. Listing and privacy text must describe this boundary and must not promise that data can never leave the machine.
 7. **No reviewer tricks.** A screencast and detailed notes explain setup; they do not replace a comprehensible missing-helper state and a reproducible helper-install path.
 
@@ -390,7 +390,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 4. Build an unchanged-version test candidate only if Google’s workflow permits non-publishing validation; otherwise validate signing locally and use the next real version.
 5. Add deterministic future-release commands: build ZIP → verify → sign CRX → verify signature/public-key fingerprint → protected upload handoff.
 6. Require a manual approval before credential use and preserve final publish as a human action.
-7. Document lost-key support escalation; Google notes recovery can require support intervention.
+7. Document lost-key escalation; Google's [update guidance](https://developer.chrome.com/docs/webstore/update/) describes support-assisted recovery for a lost Verified Uploads key.
 
 **Automation:** Signing and verification can be scripted in a protected release environment. Key generation, custody approval, and final publish remain human-controlled.
 
@@ -400,7 +400,7 @@ Each stage has an entry condition, ordered work, a completion gate, evidence, ri
 
 **Risks:** Lost/compromised key; secret exfiltration through CI logs; confusing CRX upload signing with the Store’s final distribution signing.
 
-**Recovery:** Stop releases, rotate/recover through the documented Google support process, and disclose incidents as required. Never generate a replacement silently or disable protections as a shortcut.
+**Recovery:** Stop releases and follow the support-assisted recovery path documented in Google's [update guidance](https://developer.chrome.com/docs/webstore/update/); disclose incidents where applicable. Never generate a replacement silently or disable protections as a shortcut.
 
 ## Automation backlog, prioritized
 

@@ -4,7 +4,7 @@
 
 ## Current state
 
-- **Stage 1 implemented** per `plan.md`: npm-workspaces monorepo (`packages/shared` zod contracts, `packages/extension` MV3, `packages/host` native-messaging bridge + MCP server on `127.0.0.1:8917`). 146 unit tests, `./precommit.sh` (typecheck + lint + test + audit) green, builds verified. Human-first `README.md` with manual-test walkthrough.
+- **Stage 1 implemented** per `plan.md`: npm-workspaces monorepo (`packages/shared` zod contracts, `packages/extension` MV3, `packages/host` native-messaging bridge + MCP server on `127.0.0.1:8917`). At the 2026-08-02 milestone: 146 unit tests and `./precommit.sh` (typecheck + lint + test + audit) green, builds verified. Current audit status is recorded under Chrome Web Store blockers below. Human-first `README.md` with manual-test walkthrough.
 - **Agent-ergonomics package (2026-08-02, benchmarked against Vercel agent-browser):** `tab_snapshot` `filter: interactive|full`; link `href`s (http/https, capped 300); compact indented-text MCP output via shared `renderSnapshot` (replaces JSON tree — smoke script updated to parse it); optional `grantId` defaulting to the single grant (resolved in the extension router, audited with the resolved id); per-error-code recovery instructions (`ERROR_RECOVERY`) appended to MCP errors; workflow-teaching tool descriptions. Polish round after live review: truncated names/hrefs carry a trailing `…` marker, and nameless interactive elements fall back to placeholder / inner img alt / title. Format alignment: ALL tool results are prose-shaped per the AGENTS.md principle — `tab_read` plain text, `list_grants` one line per grant with derived expiry minutes (empty list → recovery instruction). Deferred (ranked in `plan.md` §2.2): `tab_find`, snapshot ids/`stale_ref`, subtree scoping, `wait_for`/diffs; **Stage 2 prerequisite noted: expose `<select>` options before building `select(ref, value)`.**
 - Multi-agent review ran (security / correctness / quality lenses); 8 confirmed findings fixed, incl. DNS-rebinding protection on the MCP endpoint, informed re-confirm (origin shown to user), alarm-based native-port reconnect (MV3 SW lifetime), oversized-frame desync handling. 16 lower-severity findings were **not** verified/fixed (capped) — candidates for a second review round.
 - Design in `plan.md` (approved 2026-08-02); idea in `IDEA.md`; research in `RESEARCH.md`; reference analysis in `docs/chrome-tracker-takeaways.md`; canonical Chrome Web Store path in `docs/cws-signed-publishing-plan.md` (planning only — no submission started).
@@ -12,7 +12,7 @@
 
 ## Current state (Stage 2, 2026-08-02)
 
-- **Stage 2 implemented per `REQUIREMENTS.md` §7**: 'act' grants (side-panel checkbox), `tab_click`/`tab_fill`/`tab_select` on snapshot refs, per-action approval gate in the side panel (110 s auto-deny, one at a time, post-approval grant re-validation), monotonic refs → `stale_ref` by construction (rejected before the user is asked), `<select>` options on combobox nodes, password-fill refusal, action audit events, prose action results, host per-call timeout (120 s for act tools). 193 tests, precommit green, built.
+- **Stage 2 implemented per `REQUIREMENTS.md` §7**: 'act' grants (side-panel checkbox), `tab_click`/`tab_fill`/`tab_select` on snapshot refs, per-action approval gate in the side panel (110 s auto-deny, one at a time, post-approval grant re-validation), monotonic refs → `stale_ref` by construction (rejected before the user is asked), `<select>` options on combobox nodes, password-fill refusal, action audit events, prose action results, host per-call timeout (120 s for act tools). At the 2026-08-02 milestone: 193 tests, precommit green, built.
 - New error codes: `stale_ref`, `invalid_target`, `observe_only`, `approval_denied`, `approval_timeout` — all with recovery texts.
 
 ## Assist package (2026-08-02, from "what would help user+agent" ideation)
@@ -35,13 +35,11 @@
 4. Cosmetic follow-up: duplicate `native_connected` audit entries (~5× within a second) suggest reconnect churn — investigate native-port connect path.
 5. Optional: second review round over the 16 unverified findings; Stage 3 candidates per plan.md (batch approval, persistent grants) and REQUIREMENTS later-candidates (`tab_find`, subtree scoping, `wait_for`). **User decision 2026-08-02: MCP token auth deprioritized** (fully local deployment; localhost + DNS-rebinding protection accepted for now).
 
-## Open questions
+## Open publication decisions
 
-- Backend: local-only, self-hosted, or SaaS? (drives auth, secrets, enterprise story)
-- Which concrete actions must the MVP support (read/extract vs click/type/navigate)?
-- Mandatory enterprise controls: allowlists, audit log, SSO, data residency, DLP?
-- Reuse an OSS base (nanobrowser closest) or build minimal from scratch for auditability?
-- Publication execution: public Chrome Web Store v1 is selected; enterprise policy force-install remains compatible, while enterprise certification/native-host productisation is a separate track.
+- Canonical source: `docs/cws-signed-publishing-plan.md` → **Current position** and **Blocker register**; do not duplicate evolving details here.
+- Next human decisions are deliberately batched: final Store-facing name, privacy-policy host, minimum reviewer-helper path, publisher ownership/recovery, and later signing-key custody.
+- Public Chrome Web Store v1 is selected; enterprise certification/native-host productisation remains a separate track.
 
 ## Chrome Web Store blockers (planning state, 2026-08-04)
 
