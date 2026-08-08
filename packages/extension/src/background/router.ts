@@ -50,6 +50,74 @@ function mapContentResponse(id: string, resp: unknown): ToolResult {
   return errResult(id, 'tab_unreachable', 'Malformed response from content script.');
 }
 
+// The native-message reader rejects oversized frames. This leaves ample room
+// for the JSON envelope and keeps a screenshot from destabilising the channel.
+const MAX_VIEWPORT_SCREENSHOT_BASE64_BYTES = 600 * 1024;
+
+function decodedByteLength(base64: string): number {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return (base64.length * 3) / 4 - padding;
+}
+
+/** Capture only the already-visible granted tab; never steal focus to do so. */
+async function captureViewportScreenshot(reqId: string, grant: Grant, tab: chrome.tabs.Tab): Promise<ToolResult> {
+  if (grant.allowViewportScreenshot !== true) {
+    return errResult(reqId, 'screenshot_not_allowed', 'Viewport screenshots are not authorized for this grant.');
+  }
+  if (tab.active !== true || tab.windowId === undefined) {
+    return errResult(reqId, 'tab_not_visible', 'The granted tab is not active in its window.');
+  }
+
+  let dataUrl: string;
+  try {
+    dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 50 });
+  } catch (error) {
+    return errResult(reqId, 'screenshot_capture_failed', `Viewport screenshot failed: ${String(error)}`);
+  }
+
+  // The capture call is asynchronous: re-check revocation, expiry, status, and
+  // origin before exposing any pixels captured under the earlier authorization.
+  const revalidated = await validateGrantForCall(reqId, grant.grantId);
+  if ('res' in revalidated) return revalidated.res;
+  if (revalidated.grant.allowViewportScreenshot !== true) {
+    return errResult(reqId, 'screenshot_not_allowed', 'Viewport screenshots are no longer authorized for this grant.');
+  }
+
+  // captureVisibleTab takes a window rather than a tab id. Discard pixels if
+  // the active tab changed during capture, including a same-origin navigation.
+  let activeTab: chrome.tabs.Tab | undefined;
+  try {
+    [activeTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+  } catch (error) {
+    return errResult(reqId, 'tab_not_visible', `Could not confirm the active tab after capture: ${String(error)}`);
+  }
+  if (activeTab?.id !== revalidated.grant.tabId || activeTab.url !== revalidated.tab.url) {
+    return errResult(reqId, 'tab_not_visible', 'The granted tab changed or lost focus during capture; image discarded.');
+  }
+
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  if (!match) {
+    return errResult(reqId, 'tab_unreachable', 'Viewport screenshot returned an invalid image payload.');
+  }
+  const data = match[1];
+  if (!data) {
+    return errResult(reqId, 'tab_unreachable', 'Viewport screenshot returned an invalid image payload.');
+  }
+  if (data.length > MAX_VIEWPORT_SCREENSHOT_BASE64_BYTES) {
+    return errResult(
+      reqId,
+      'screenshot_too_large',
+      `Viewport screenshot is ${decodedByteLength(data)} bytes, above the safe transfer limit.`,
+    );
+  }
+  return okResult(reqId, {
+    mimeType: 'image/jpeg',
+    data,
+    url: tab.url ?? grant.origin,
+    title: tab.title ?? '',
+  });
+}
+
 /** Handle one toolCall: route, then audit the outcome (with the resolved grant + tab). */
 export async function handleToolCall(req: ToolCallRequest): Promise<ToolResult> {
   const routed = await routeToolCall(req);
@@ -77,7 +145,7 @@ interface RoutedResult {
  * tab access — including AGAIN after an approval wait, since minutes may have
  * passed and the grant may have expired, been suspended, or lost its tab.
  */
-async function validateGrantForCall(reqId: string, grantId: string): Promise<{ grant: Grant } | { res: ToolResult }> {
+async function validateGrantForCall(reqId: string, grantId: string): Promise<{ grant: Grant; tab: chrome.tabs.Tab } | { res: ToolResult }> {
   const grant = await getGrant(grantId);
   if (!grant) {
     return { res: errResult(reqId, 'no_grant', `No grant with id ${grantId}.`) };
@@ -117,7 +185,7 @@ async function validateGrantForCall(reqId: string, grantId: string): Promise<{ g
     });
     return { res: errResult(reqId, 'grant_suspended', 'Tab origin no longer matches the grant; grant suspended.') };
   }
-  return { grant };
+  return { grant, tab };
 }
 
 async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
@@ -180,6 +248,10 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   const validated = await validateGrantForCall(req.id, grantId);
   if ('res' in validated) return { res: validated.res, grantId, tabId };
   const grant = validated.grant;
+
+  if (req.tool === 'tab_screenshot_viewport') {
+    return { res: await captureViewportScreenshot(req.id, grant, validated.tab), grantId, tabId };
+  }
 
   if (isActTool(req.tool)) {
     return { res: await routeActTool(req, grant), grantId, tabId };

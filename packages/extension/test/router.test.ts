@@ -113,6 +113,68 @@ describe('router', () => {
     });
   });
 
+  it('rejects viewport screenshots unless the grant explicitly allows them', async () => {
+    const grant = await mintGrant(1, ORIGIN);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/`, active: true, windowId: 7 });
+
+    expectError(await handleToolCall(call('tab_screenshot_viewport', { grantId: grant.grantId })), 'screenshot_not_allowed');
+    expect(mock.tabs.captureVisibleTab).not.toHaveBeenCalled();
+  });
+
+  it('captures only an allowed granted tab that is already active in its window', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'observe', true);
+    mock.tabs.get.mockResolvedValue({
+      id: 1,
+      url: `${ORIGIN}/dashboard`,
+      title: 'Dashboard',
+      active: true,
+      windowId: 7,
+    });
+    mock.tabs.captureVisibleTab.mockResolvedValue('data:image/jpeg;base64,aGVsbG8=');
+    mock.tabs.query.mockResolvedValue([{ id: 1, url: `${ORIGIN}/dashboard`, active: true, windowId: 7 }]);
+
+    const res = await handleToolCall(call('tab_screenshot_viewport', { grantId: grant.grantId }));
+
+    expect(res).toMatchObject({
+      ok: true,
+      result: {
+        mimeType: 'image/jpeg',
+        data: 'aGVsbG8=',
+        url: `${ORIGIN}/dashboard`,
+        title: 'Dashboard',
+      },
+    });
+    expect(mock.tabs.captureVisibleTab).toHaveBeenCalledWith(7, { format: 'jpeg', quality: 50 });
+  });
+
+  it('discards a capture if the grant is revoked while capture is pending', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'observe', true);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/`, active: true, windowId: 7 });
+    mock.tabs.captureVisibleTab.mockImplementation(async () => {
+      await revokeGrant(grant.grantId);
+      return 'data:image/jpeg;base64,aGVsbG8=';
+    });
+
+    expectError(await handleToolCall(call('tab_screenshot_viewport', { grantId: grant.grantId })), 'no_grant');
+  });
+
+  it('discards a capture if another tab became active during the capture call', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'observe', true);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/`, active: true, windowId: 7 });
+    mock.tabs.captureVisibleTab.mockResolvedValue('data:image/jpeg;base64,aGVsbG8=');
+    mock.tabs.query.mockResolvedValue([{ id: 2, url: 'https://other.example/', active: true, windowId: 7 }]);
+
+    expectError(await handleToolCall(call('tab_screenshot_viewport', { grantId: grant.grantId })), 'tab_not_visible');
+  });
+
+  it('refuses to capture when the granted tab is not active, without changing focus', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'observe', true);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/`, active: false, windowId: 7 });
+
+    expectError(await handleToolCall(call('tab_screenshot_viewport', { grantId: grant.grantId })), 'tab_not_visible');
+    expect(mock.tabs.captureVisibleTab).not.toHaveBeenCalled();
+  });
+
   it('resolves an omitted grantId to the single existing grant and audits it', async () => {
     const grant = await mintGrant(1, ORIGIN);
     mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });

@@ -59,8 +59,9 @@ export function renderGrants(grants: Grant[], now: number): string {
           `again in the side panel (grantId ${g.grantId})`
         );
       }
+      const screenshot = g.allowViewportScreenshot ? ', viewport screenshots ON' : '';
       const auto = g.autoApprove ? ', auto-approve ON (actions run without the approval pause)' : '';
-      const line = `${g.mode} grant for ${g.origin} — ${g.status}${auto}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
+      const line = `${g.mode} grant for ${g.origin} — ${g.status}${screenshot}${auto}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
       return g.status === 'suspended'
         ? `${line} — the user must click 'Re-confirm' in the side panel to resume access`
         : line;

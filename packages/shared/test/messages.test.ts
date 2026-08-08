@@ -18,6 +18,7 @@ const grant: Grant = {
   tabId: 123,
   origin: 'https://app.example.com',
   mode: 'observe',
+  allowViewportScreenshot: false,
   status: 'active',
   expiresAt: '2026-08-02T12:30:00.000Z',
   createdByGesture: true,
@@ -29,6 +30,7 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'tab_snapshot',
       'tab_read',
       'tab_find',
+      'tab_screenshot_viewport',
       'list_grants',
       'request_grant',
       'tab_click',
@@ -53,6 +55,10 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'busy',
       'tab_unreachable',
       'timeout',
+      'screenshot_not_allowed',
+      'tab_not_visible',
+      'screenshot_too_large',
+      'screenshot_capture_failed',
     ]);
   });
 

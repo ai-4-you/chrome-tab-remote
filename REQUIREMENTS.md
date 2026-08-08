@@ -26,7 +26,7 @@
 
 ## 3. Observation (Stage 1 tools) — implemented
 
-- **O-1** The agent sees an **accessibility-style snapshot** (roles, accessible names, values, stable refs `n0…`) — never raw HTML, never screenshots.
+- **O-1** The agent sees an **accessibility-style snapshot** (roles, accessible names, values, stable refs `n0…`) — never raw HTML. Screenshots require the separate, explicit O-10 capability.
 - **O-2** Password values are **always `[redacted]`**, in snapshots and in `tab_read`, with no bypass.
 - **O-3** Hidden elements (display:none, visibility:hidden, aria-hidden, hidden) and non-content tags (script/style/svg/iframe/…) are excluded.
 - **O-4** Size discipline with honest markers: 1500-node cap (`truncated` flag), 120-char names and 300-char hrefs cut with a visible `…`, 200k-char `tab_read` cap with an inline `[truncated: N more chars]` marker. Nothing is silently cut.
@@ -35,11 +35,12 @@
 - **O-7** Nameless interactive elements get accname-style fallback names: placeholder → inner img alt → title. Visible text always wins.
 - **O-8** `tab_read(ref)` returns the full (capped) text of one element from the **latest** snapshot; unknown refs fail with `unknown_ref`.
 - **O-9** `tab_find(query, role?)` (implemented 2026-08-02) searches names/values/URLs case-insensitively and returns matching nodes as snapshot lines (capped 30) — cheaper than full snapshots on large pages. It takes a fresh snapshot internally, so it announces that all earlier refs are stale.
+- **O-10** `tab_screenshot_viewport` (implemented, live-verified in Brave 2026-08-08): only a grant minted with the explicit **Allow ViewportScreenshot** checkbox may return a JPEG image of its currently visible viewport. The granted tab must already be active in its own window; capture never focuses, scrolls, persists, or captures a full page. JPEG base64 is capped at 600 KiB before it crosses native messaging; the MCP result carries readable metadata plus an image content block. Chrome requires `activeTab` (established when the user invokes the toolbar action on that tab) or `<all_urls>`; this product uses the former and does not widen permissions. The user invokes the toolbar action again after screenshot grant to establish capture access. The normal grant’s origin pin, 30-minute session expiry, revocation, call-time revalidation, and audit all apply.
 
 ## 4. Agent experience (MCP surface) — implemented
 
 - **X-1** The tab is exposed via **MCP** (Streamable HTTP, `127.0.0.1:8917/mcp`, DNS-rebinding protected). Any MCP client can be the agent; we ship none.
-- **X-2** **Prose-shaped output is the machine format** (see AGENTS.md): snapshots as compact indented text, `tab_read` as plain text (`[empty — …]` when the element is empty), `list_grants` as one line per grant with expiry as derived minutes.
+- **X-2** **Prose-shaped output is the machine format** (see AGENTS.md): snapshots as compact indented text, `tab_read` as plain text (`[empty — …]` when the element is empty), `list_grants` as one line per grant with expiry as derived minutes. `tab_screenshot_viewport` returns a prose metadata line alongside its MCP image block.
 - **X-3** Every error carries a concrete **"Next step:"** recovery instruction (usually: what to ask the user to do).
 - **X-4** `grantId` is optional on every tool — it defaults to the single grant; audit records the resolved id.
 - **X-5** Expiry wins over stored status: an expired grant is reported "expired + re-grant instruction", never "active" and never "re-confirm".
@@ -91,7 +92,7 @@ The controlling half of IDEA.md ("…and control the page"). Everything below in
 | Area | Enforced in | Tested in |
 |---|---|---|
 | G-* | `packages/extension/src/background/` (grant-store, router, origin-permission) | `extension/test/{grant-store,router,background}.test.ts` |
-| O-* | `packages/extension/src/content/snapshot.ts` | `extension/test/snapshot.test.ts` |
+| O-* | `packages/extension/src/content/snapshot.ts`; O-10: `extension/src/background/router.ts`, `host/src/mcp-server.ts` | `extension/test/snapshot.test.ts`; O-10: `extension/test/router.test.ts`, `host/test/mcp-server.test.ts` |
 | X-* | `packages/host/src/mcp-server.ts` + `packages/shared/src/{render,errors}.ts` | `host/test/mcp-server.test.ts`, `shared/test/render.test.ts` |
 | A-* | `extension/src/background/audit.ts`, `host/src/{audit-log,bridge,native-messaging}.ts` | `host/test/{bridge,native-messaging}.test.ts` |
 | C-* | `extension/src/background/{router,approvals}.ts`, `extension/src/content/actions.ts` | `extension/test/{router,approvals,actions}.test.ts`, `host/test/mcp-server.test.ts` |

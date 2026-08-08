@@ -9,7 +9,14 @@ const STORAGE_KEY = 'ctrGrants';
 async function readGrants(): Promise<Grant[]> {
   const data = await chrome.storage.session.get(STORAGE_KEY);
   const grants = data[STORAGE_KEY];
-  return Array.isArray(grants) ? (grants as Grant[]) : [];
+  if (!Array.isArray(grants)) return [];
+  // Grants persisted before viewport screenshots existed lack this field. Normalize
+  // them at the storage boundary to preserve the explicit default-deny contract.
+  return grants.map((grant) => ({
+    ...(grant as object),
+    allowViewportScreenshot:
+      (grant as { allowViewportScreenshot?: unknown }).allowViewportScreenshot === true,
+  })) as Grant[];
 }
 
 async function writeGrants(grants: Grant[]): Promise<void> {
@@ -34,12 +41,14 @@ export async function mintGrant(
   origin: string,
   now: number = Date.now(),
   mode: GrantMode = 'observe',
+  allowViewportScreenshot = false,
 ): Promise<Grant> {
   const grant: Grant = {
     grantId: crypto.randomUUID(),
     tabId,
     origin,
     mode,
+    allowViewportScreenshot,
     status: 'active',
     expiresAt: new Date(now + DEFAULT_GRANT_TTL_MS).toISOString(),
     createdByGesture: true,

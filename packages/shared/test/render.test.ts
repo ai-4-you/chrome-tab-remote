@@ -82,6 +82,7 @@ describe('renderGrants', () => {
     tabId: 7,
     origin: 'https://app.example.com',
     mode: 'observe',
+    allowViewportScreenshot: false,
     status: 'active',
     expiresAt: '2026-08-02T10:12:30.000Z',
     createdByGesture: true,

@@ -254,3 +254,9 @@ The most trustworthy findings are the **official Chrome security/API constraints
 | SaaS | Fastest centralized product iteration and support. | Highest data-protection, residency, breach-impact, and trust burden. | Define data minimization, tenancy, retention, region hosting, and contractual roles. |
 
 **Working recommendation:** Prototype local-only or self-hosted first; consider SaaS only after the data-flow and enterprise-control requirements are explicit.
+
+## 2026-08-04 — `captureVisibleTab` permission constraint (official Chrome docs)
+
+- Chrome documents `chrome.tabs.captureVisibleTab` as capturing the visible area of the **currently active tab** in a specified window and requiring either `<all_urls>` or `activeTab`: <https://developer.chrome.com/docs/extensions/reference/api/tabs>.
+- Chrome documents `activeTab` access as beginning when the user invokes the extension and lasting while the user remains on that page: <https://developer.chrome.com/docs/extensions/develop/concepts/activeTab>.
+- Product consequence: `tab_screenshot_viewport` must not add `<all_urls>` or `chrome.debugger`. It requires an explicitly screenshot-enabled grant, the granted tab must still be active, and the user must invoke Chrome Tab Remote from that tab if Chrome capture permission has expired. Unit tests cover the extension-side checks; a real Chrome run remains required to verify this flow end-to-end.

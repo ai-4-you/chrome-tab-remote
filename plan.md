@@ -64,7 +64,7 @@ Enforcement rules (in the extension service worker, not in the backend):
 
 ### 2.2 Page representation — accessibility-tree snapshot
 
-The agent never sees raw DOM or screenshots. The content script produces a structured snapshot derived from the **accessibility tree / ARIA semantics** (the approach validated by playwright-mcp): roles, names, states, values, plus stable node references (`ref: "n42"`).
+The agent never sees raw DOM. By default it sees a structured snapshot derived from the **accessibility tree / ARIA semantics** (the approach validated by playwright-mcp): roles, names, states, values, plus stable node references (`ref: "n42"`). A separate, default-off viewport screenshot capability may return bounded pixels only for the granted tab’s already-active visible viewport; it never enables pixel-coordinate actions.
 
 - Deterministic and compact — LLM-friendly, no pixel-guessing.
 - Standards-based: ARIA is a W3C standard; the a11y tree is how assistive tech already reads pages.
@@ -116,7 +116,7 @@ Fixes the reference prototype's weakest area (chrome-tracker's replay-prone file
 
 - No `<all_urls>` content scripts, no tracking, no knowledge store (scope decision, see `AGENTS.md`).
 - No LLM inside the extension — the extension is a *deterministic policy-enforcing actuator*; intelligence lives behind MCP.
-- No screenshots/pixel-coordinate clicking in the MVP (a11y snapshot first; `tabCapture` could be a later opt-in).
+- No full-page screenshots or pixel-coordinate clicking. The only screenshot capability is the separately consented, bounded active-viewport JPEG; `tabCapture` remains a later opt-in candidate.
 - No `chrome.debugger`/CDP path.
 
 ## 4. Standards inventory

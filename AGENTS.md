@@ -13,6 +13,7 @@ A **trust-first Chrome extension** (plus backend communication) that lets a user
 ## Scope decisions (durable)
 
 - **2026-08-04:** Distribution for v1 is a public Chrome Web Store listing. Managed enterprise force-install by Store ID remains compatible; enterprise certification and signed/cross-platform native-host productisation are a separate delivery track. Canonical execution plan: `docs/cws-signed-publishing-plan.md`.
+- **2026-08-04:** Viewport screenshots are permitted only through a separate, default-off `Allow ViewportScreenshot` grant capability. It is limited to the granted tab’s already-active visible viewport; it never focuses, scrolls, persists images, or grants full-page capture. Its normal origin pin, session expiry, revocation, call-time validation, and audit all apply.
 - **2026-08-02:** Focus is the Chrome extension and its communication with a backend system only. The knowledge-gathering/RAG side of the reference system chrome-tracker is explicitly **out of scope**.
 - The extension is purpose-built for interactive tab control — no tracking/knowledge-base machinery bundled in.
 

@@ -15,6 +15,10 @@ export const ERROR_CODES = [
   'busy',
   'tab_unreachable',
   'timeout',
+  'screenshot_not_allowed',
+  'tab_not_visible',
+  'screenshot_too_large',
+  'screenshot_capture_failed',
 ] as const;
 
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
@@ -71,4 +75,16 @@ export const ERROR_RECOVERY: Record<ErrorCode, string> = {
   timeout:
     'The extension did not answer in time. Ask the user to check the side panel shows ' +
     "'Native host: connected', then retry.",
+  screenshot_not_allowed:
+    'Viewport screenshots are not authorized for this grant. Ask the user to enable ' +
+    "'Allow ViewportScreenshot' in the side panel for this tab, then retry.",
+  tab_not_visible:
+    'The granted tab is not the active tab in its window, so no pixels were captured. ' +
+    'Ask the user to focus the granted tab, then retry.',
+  screenshot_too_large:
+    'The viewport image exceeds the safe transfer limit and was not sent. Ask the user ' +
+    'to reduce browser zoom or resize the window, then retry.',
+  screenshot_capture_failed:
+    'Chrome did not permit this viewport capture. Ask the user to focus the granted tab and ' +
+    'click the Chrome Tab Remote toolbar action on it, then retry. Restricted Chrome pages cannot be captured.',
 };

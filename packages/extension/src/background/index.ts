@@ -39,10 +39,12 @@ import { connectNativeHost, getNativeStatus, sendToHost } from './native-port.js
 import { dropOriginPermission } from './origin-permission.js';
 import { handleToolCall } from './router.js';
 
-// Toolbar icon opens the side panel.
-void chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch(() => undefined);
+// A real action invocation grants activeTab for the clicked page. Open the
+// panel directly from that gesture; this is required before viewport capture.
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.windowId === undefined) return;
+  void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+});
 
 // Every audit entry is forwarded to the host for JSONL persistence AND pushes a
 // panel refresh so the audit view never lags behind reality.
@@ -135,7 +137,11 @@ export type SidePanelResult =
   | { ok: true; grant?: Grant }
   | { ok: false; error: string };
 
-async function grantActiveTab(tabId: number, mode: GrantMode): Promise<SidePanelResult> {
+async function grantActiveTab(
+  tabId: number,
+  mode: GrantMode,
+  allowViewportScreenshot: boolean,
+): Promise<SidePanelResult> {
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -146,7 +152,7 @@ async function grantActiveTab(tabId: number, mode: GrantMode): Promise<SidePanel
   if (!origin) {
     return { ok: false, error: 'Only http(s) pages can be granted.' };
   }
-  const grant = await mintGrant(tabId, origin, Date.now(), mode);
+  const grant = await mintGrant(tabId, origin, Date.now(), mode, allowViewportScreenshot);
   try {
     await injectContentScript(tabId);
   } catch (err) {
@@ -154,7 +160,12 @@ async function grantActiveTab(tabId: number, mode: GrantMode): Promise<SidePanel
     await dropOriginPermission(origin);
     return { ok: false, error: `Could not inject the content script into this tab. (${String(err)})` };
   }
-  await appendAudit({ type: 'grant_created', grantId: grant.grantId, tabId, detail: `${origin} (${mode})` });
+  await appendAudit({
+    type: 'grant_created',
+    grantId: grant.grantId,
+    tabId,
+    detail: `${origin} (${mode}${allowViewportScreenshot ? '; viewport screenshots' : ''})`,
+  });
   // A fresh grant answers any pending agent access request.
   grantRequestGranted();
   await broadcastGrants();
@@ -260,6 +271,8 @@ interface SidePanelMessage {
   grantId?: string;
   /** ctrGrantActiveTab only: 'observe' (default) or 'act'. */
   mode?: string;
+  /** ctrGrantActiveTab only: explicit viewport screenshot consent. */
+  allowViewportScreenshot?: boolean;
   /** ctrReconfirm only: the origin the side panel showed the user. */
   expectedOrigin?: string;
   /** ctrApprove / ctrDeny only. */
@@ -304,7 +317,11 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ok: false, error: 'Missing tabId.' });
           return false;
         }
-        void grantActiveTab(m.tabId, m.mode === 'act' ? 'act' : 'observe').then(sendResponse);
+        void grantActiveTab(
+          m.tabId,
+          m.mode === 'act' ? 'act' : 'observe',
+          m.allowViewportScreenshot === true,
+        ).then(sendResponse);
         return true;
       case 'ctrSetAutoApprove':
         if (typeof m.grantId !== 'string' || typeof m.enabled !== 'boolean') {

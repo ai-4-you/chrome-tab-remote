@@ -8,6 +8,7 @@ export const TOOL_NAMES = [
   'tab_snapshot',
   'tab_read',
   'tab_find',
+  'tab_screenshot_viewport',
   'list_grants',
   'request_grant',
   'tab_click',
@@ -102,12 +103,21 @@ export const FindResultSchema = z.object({
 });
 export type FindResult = z.infer<typeof FindResultSchema>;
 
+/** A bounded JPEG viewport image, encoded for native messaging and MCP image content. */
+export const ViewportScreenshotResultSchema = z.object({
+  mimeType: z.literal('image/jpeg'),
+  data: z.string().min(1),
+  url: z.string().url(),
+  title: z.string(),
+});
+export type ViewportScreenshotResult = z.infer<typeof ViewportScreenshotResultSchema>;
+
 /** host -> extension: request execution of one tool call. */
 export const ToolCallRequestSchema = z.object({
   id: z.string().min(1),
   kind: z.literal('toolCall'),
   tool: ToolNameSchema,
-  params: z.record(z.unknown()),
+  params: z.record(z.string(), z.unknown()),
 });
 export type ToolCallRequest = z.infer<typeof ToolCallRequestSchema>;
 

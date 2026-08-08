@@ -25,10 +25,19 @@ describe('grant-store', () => {
     expect(grant.tabId).toBe(7);
     expect(grant.origin).toBe(ORIGIN);
     expect(grant.mode).toBe('observe');
+    expect(grant.allowViewportScreenshot).toBe(false);
     expect(grant.status).toBe('active');
     expect(grant.createdByGesture).toBe(true);
     expect(Date.parse(grant.expiresAt)).toBe(now + DEFAULT_GRANT_TTL_MS);
     expect(await getGrant(grant.grantId)).toEqual(grant);
+  });
+
+  it('defaults viewport screenshot consent to false for a persisted legacy grant', async () => {
+    const grant = await mintGrant(7, ORIGIN);
+    const { allowViewportScreenshot: _omitted, ...legacyGrant } = grant;
+    await chrome.storage.session.set({ ctrGrants: [legacyGrant] });
+
+    expect((await getGrant(grant.grantId))?.allowViewportScreenshot).toBe(false);
   });
 
   it('enforces the one-grant rule: minting replaces any existing grant', async () => {

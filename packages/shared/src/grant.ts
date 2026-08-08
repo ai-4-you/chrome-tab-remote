@@ -20,6 +20,8 @@ export const GrantSchema = z.object({
   /** Origin the grant is pinned to, e.g. "https://app.example.com". */
   origin: z.string().url(),
   mode: GrantModeSchema,
+  /** Explicit, session-scoped consent to expose pixels from the visible tab viewport. */
+  allowViewportScreenshot: z.boolean().default(false),
   /**
    * User-controlled "YOLO" switch (act grants only): actions execute WITHOUT
    * the per-action approval pause. Off by default; toggleable live in the side

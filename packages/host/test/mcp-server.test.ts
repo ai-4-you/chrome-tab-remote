@@ -14,6 +14,7 @@ const GRANT: Grant = {
   tabId: 3,
   origin: 'https://docs.example.com',
   mode: 'observe',
+  allowViewportScreenshot: false,
   status: 'active',
   expiresAt: '2026-08-02T12:00:00.000Z',
   createdByGesture: true,
@@ -100,6 +101,27 @@ describe('createToolHandlers', () => {
         '  - n1 link "Home" https://docs.example.com/home',
       ].join('\n'),
     );
+  });
+
+  it('tab_screenshot_viewport returns prose metadata plus an MCP image block', async () => {
+    const callTool = vi.fn(async () => ({
+      mimeType: 'image/jpeg',
+      data: 'aGVsbG8=',
+      url: 'https://docs.example.com/dashboard',
+      title: 'Dashboard',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+
+    const result = await handlers.tabScreenshotViewport({ grantId: GRANT.grantId });
+
+    expect(callTool).toHaveBeenCalledWith('tab_screenshot_viewport', { grantId: GRANT.grantId });
+    expect(result.content).toEqual([
+      {
+        type: 'text',
+        text: 'Viewport screenshot: Dashboard — https://docs.example.com/dashboard (JPEG, 5 B)',
+      },
+      { type: 'image', data: 'aGVsbG8=', mimeType: 'image/jpeg' },
+    ]);
   });
 
   it('tab_snapshot omits grantId when not given and forwards the filter', async () => {

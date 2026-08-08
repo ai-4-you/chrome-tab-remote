@@ -19,6 +19,7 @@ import {
   SNAPSHOT_FILTERS,
   SnapshotResultSchema,
   TabReadResultSchema,
+  ViewportScreenshotResultSchema,
 } from '@ctr/shared';
 import { ToolCallError } from './bridge.js';
 
@@ -98,6 +99,25 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
         // tree); fall back to JSON if the extension sent an unexpected shape.
         const parsed = SnapshotResultSchema.safeParse(raw);
         return parsed.success ? textResult(renderSnapshot(parsed.data)) : okResult(raw);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    tabScreenshotViewport: async ({ grantId }: { grantId?: string }): Promise<CallToolResult> => {
+      try {
+        const raw = await bridge.callTool('tab_screenshot_viewport', grantParams(grantId));
+        const parsed = ViewportScreenshotResultSchema.safeParse(raw);
+        if (!parsed.success) return okResult(raw);
+        const bytes = Buffer.byteLength(parsed.data.data, 'base64');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Viewport screenshot: ${parsed.data.title || '[untitled]'} — ${parsed.data.url} (JPEG, ${bytes} B)`,
+            },
+            { type: 'image', data: parsed.data.data, mimeType: parsed.data.mimeType },
+          ],
+        };
       } catch (error) {
         return errorResult(error);
       }
@@ -220,6 +240,19 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
       },
     },
     handlers.tabSnapshot,
+  );
+
+  server.registerTool(
+    'tab_screenshot_viewport',
+    {
+      description:
+        'Capture a JPEG image of the currently visible area of the granted tab. Requires the user ' +
+        "to enable 'Allow ViewportScreenshot' when granting the tab. The granted tab must already be " +
+        'the active tab in its window; this tool never changes focus or scroll position. It returns ' +
+        'a bounded image plus text metadata. If the tab is not visible, ask the user to focus it, then retry.',
+      inputSchema: { grantId: GRANT_ID_INPUT },
+    },
+    handlers.tabScreenshotViewport,
   );
 
   server.registerTool(

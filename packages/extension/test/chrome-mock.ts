@@ -55,10 +55,19 @@ export function createChromeMock() {
       local: createStorageArea(),
     },
     tabs: {
-      get: vi.fn(async (_tabId: number): Promise<{ id: number; url?: string; title?: string }> => {
+      get: vi.fn(async (_tabId: number): Promise<{ id: number; url?: string; title?: string; active?: boolean; windowId?: number }> => {
         throw new Error('No tab with given id.');
       }),
-      query: vi.fn(async () => [] as { id?: number; url?: string; title?: string }[]),
+      query: vi.fn(async (_queryInfo?: unknown) => [] as {
+        id?: number;
+        url?: string;
+        title?: string;
+        active?: boolean;
+        windowId?: number;
+      }[]),
+      captureVisibleTab: vi.fn(async (_windowId: number, _options: unknown): Promise<string> => {
+        throw new Error('capture not configured');
+      }),
       sendMessage: vi.fn(async (_tabId: number, _msg: unknown): Promise<unknown> => {
         throw new Error('Could not establish connection.');
       }),
@@ -85,7 +94,11 @@ export function createChromeMock() {
       create: vi.fn(async (_name: string, _info: { periodInMinutes?: number }) => undefined),
       onAlarm: new MockEvent<(alarm: { name: string }) => void>(),
     },
+    action: {
+      onClicked: new MockEvent<(tab: { windowId?: number }) => void>(),
+    },
     sidePanel: {
+      open: vi.fn(async (_options: unknown) => undefined),
       setPanelBehavior: vi.fn(async (_behavior: unknown) => undefined),
     },
     /** Test helper: the port returned by connectNative. */

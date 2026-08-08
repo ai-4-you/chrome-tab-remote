@@ -21,8 +21,12 @@
       <div id="current-tab-origin" class="muted">—</div>
       <div id="tab-share-status" class="share-status"></div>
       <label class="checkbox-row">
+        <input type="checkbox" id="viewport-screenshot-mode" />
+        Allow ViewportScreenshot — shared with agent
+      </label>
+      <label class="checkbox-row">
         <input type="checkbox" id="act-mode" />
-        Also allow actions — every single action still needs your approval here
+        Allow actions — single action approval (unless Freaky mode)
       </label>
       <button id="grant-btn" class="btn btn-primary">Grant observe access (30 min)</button>
       <div id="grant-error" class="error hidden"></div>

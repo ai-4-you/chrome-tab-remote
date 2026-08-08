@@ -40,6 +40,7 @@ const els = {
   tabTitle: $('current-tab-title'),
   tabOrigin: $('current-tab-origin'),
   tabShareStatus: $('tab-share-status'),
+  viewportScreenshotMode: $('viewport-screenshot-mode') as HTMLInputElement,
   actMode: $('act-mode') as HTMLInputElement,
   grantBtn: $('grant-btn') as HTMLButtonElement,
   grantError: $('grant-error'),
@@ -351,6 +352,7 @@ els.grantBtn.addEventListener('click', () => {
       type: 'ctrGrantActiveTab',
       tabId: currentTab.id,
       mode: els.actMode.checked ? 'act' : 'observe',
+      allowViewportScreenshot: els.viewportScreenshotMode.checked,
     })) as { ok: boolean; error?: string };
     if (!res.ok) showError(res.error ?? 'Grant failed.');
     await refresh();

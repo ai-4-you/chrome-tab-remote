@@ -69,7 +69,9 @@ Grants, approvals, and audit stay fully separate per browser; an agent picks the
 1. Open any normal website and click the **Chrome Tab Remote** toolbar icon — the side panel opens.
 2. Check the panel shows **Native host: connected**, with an `MCP: http://127.0.0.1:…/mcp` line under the header — that URL is where your agent connects (it differs per browser).
 3. Click **"Grant observe access (30 min)"** and accept Chrome's permission prompt for that site.
-4. You should see an **Active grant** card with the site, a countdown, and a Revoke button.
+4. For pixel access, tick **"Allow ViewportScreenshot — shared with agent"** before granting. It is off by default; it captures only this tab’s current visible area and never focuses or scrolls the tab.
+5. For viewport screenshots, click the **Chrome Tab Remote** toolbar icon once more while this granted tab remains active; this establishes Chrome’s temporary capture permission for the tab.
+6. You should see an **Active grant** card with the site, a countdown, and a Revoke button.
 
 ### 3. Read the tab through MCP
 
@@ -87,9 +89,10 @@ npx -y mcporter call http://127.0.0.1:8917/mcp --tool list_grants --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot filter:interactive --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_read ref:n1 --allow-http
+npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_screenshot_viewport --allow-http
 ```
 
-There is at most one grant, so `grantId` is optional everywhere. The snapshot comes back as compact indented text — one line per element with a ref (`n1`), role, name, and link URL; `filter:interactive` narrows it to controls and headings. Pass a ref to `tab_read` for the full text of one element.
+There is at most one grant, so `grantId` is optional everywhere. The snapshot comes back as compact indented text — one line per element with a ref (`n1`), role, name, and link URL; `filter:interactive` narrows it to controls and headings. Pass a ref to `tab_read` for the full text of one element. `tab_screenshot_viewport` requires the separate checkbox, and only succeeds while the granted tab is already active in its window; it returns a bounded JPEG image plus metadata.
 
 Or hand the tab to a real agent:
 
@@ -100,7 +103,7 @@ claude mcp add --transport http tab-remote http://127.0.0.1:8917/mcp
 
 ### 4. Let the agent act (with your approval)
 
-Re-grant the tab with **"allow actions"** ticked, then:
+Re-grant the tab with **"Allow actions — single action approval (unless Freaky mode)"** ticked, then:
 
 ```bash
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot filter:interactive --allow-http
@@ -126,6 +129,8 @@ Multi-step work uses `tab_plan`: the agent proposes up to 10 steps, you see the 
 | Wait out the 30 minutes | Tool calls fail with `grant_expired` |
 | Snapshot a page with a password field | The password value reads `[redacted]` |
 | Call `tab_click` on an observe-only grant | Fails with `observe_only` — the page is never touched |
+| Call `tab_screenshot_viewport` without its checkbox | Fails with `screenshot_not_allowed` — no pixels are captured |
+| Call `tab_screenshot_viewport` while the granted tab is backgrounded | Fails with `tab_not_visible` — it never steals focus |
 | **Deny** an action in the approval card | Agent gets `approval_denied`; the page is untouched |
 | Toggle **Freaky mode** off mid-session | The very next action pauses for approval again |
 | Revoke and re-grant with Freaky mode previously on | The new grant starts strict (per-action approval) |
@@ -146,7 +151,7 @@ Everything above is implemented and verified live against real browsers (Chrome 
 ## For developers
 
 ```bash
-./precommit.sh   # typecheck + lint + 231 tests + dependency audit
+./precommit.sh   # typecheck + lint + 241 tests + dependency audit
 ```
 
 Workspaces: `packages/shared` (zod protocol schemas — canonical), `packages/extension` (MV3, vanilla TypeScript, no frameworks), `packages/host` (native-messaging bridge + MCP server). Uninstall the helper with `node packages/host/scripts/install-native-host.mjs --uninstall`.

@@ -8,6 +8,7 @@ function makeGrant(overrides: Partial<Grant> = {}): Grant {
     tabId: 7,
     origin: 'https://app.example.com',
     mode: 'observe',
+    allowViewportScreenshot: false,
     status: 'active',
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     createdByGesture: true,

@@ -19,6 +19,25 @@ function sendPanelMessage(msg: unknown): Promise<unknown> {
   });
 }
 
+describe('toolbar action', () => {
+  beforeEach(async () => {
+    await mock.storage.session.clear();
+    mock.sidePanel.open.mockClear();
+  });
+
+  it('opens the clicked tab window from an explicit action invocation', () => {
+    mock.action.onClicked.emit({ windowId: 7 });
+    expect(mock.sidePanel.open).toHaveBeenCalledWith({ windowId: 7 });
+    expect(mock.sidePanel.setPanelBehavior).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the action callback has no window id', () => {
+    mock.action.onClicked.emit({});
+    expect(mock.sidePanel.open).not.toHaveBeenCalled();
+  });
+
+});
+
 describe('ctrReconfirm (informed re-pin)', () => {
   beforeEach(async () => {
     await mock.storage.session.clear();
