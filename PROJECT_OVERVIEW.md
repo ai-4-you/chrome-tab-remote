@@ -1,6 +1,6 @@
 # PROJECT_OVERVIEW — chrome-tab-remote
 
-> as-of: 2026-08-08 · phase: **product behavior implemented and live-verified (Chrome + Brave); source-release ready, Chrome Web Store publication planning active; 241 tests**
+> as-of: 2026-08-26 · phase: **product behavior implemented and live-verified (Chrome + Brave); source-release ready, Chrome Web Store publication planning active; 244 tests**
 
 ## Current state
 
@@ -9,6 +9,7 @@
 - **Agent-ergonomics package (2026-08-02, benchmarked against Vercel agent-browser):** `tab_snapshot` `filter: interactive|full`; link `href`s (http/https, capped 300); compact indented-text MCP output via shared `renderSnapshot` (replaces JSON tree — smoke script updated to parse it); optional `grantId` defaulting to the single grant (resolved in the extension router, audited with the resolved id); per-error-code recovery instructions (`ERROR_RECOVERY`) appended to MCP errors; workflow-teaching tool descriptions. Polish round after live review: truncated names/hrefs carry a trailing `…` marker, and nameless interactive elements fall back to placeholder / inner img alt / title. Format alignment: ALL tool results are prose-shaped per the AGENTS.md principle — `tab_read` plain text, `list_grants` one line per grant with derived expiry minutes (empty list → recovery instruction). Deferred (ranked in `plan.md` §2.2): `tab_find`, snapshot ids/`stale_ref`, subtree scoping, `wait_for`/diffs; **Stage 2 prerequisite noted: expose `<select>` options before building `select(ref, value)`.**
 - Multi-agent review ran (security / correctness / quality lenses); 8 confirmed findings fixed, incl. DNS-rebinding protection on the MCP endpoint, informed re-confirm (origin shown to user), alarm-based native-port reconnect (MV3 SW lifetime), oversized-frame desync handling. 16 lower-severity findings were **not** verified/fixed (capped) — candidates for a second review round.
 - Design in `plan.md` (approved 2026-08-02); idea in `IDEA.md`; research in `RESEARCH.md`; reference analysis in `docs/chrome-tracker-takeaways.md`; canonical Chrome Web Store path in `docs/cws-signed-publishing-plan.md` (planning only — no submission started).
+- Native-host installer hardening (2026-08-26): when invoked from a Homebrew Node Cellar path, the generated dispatcher now uses that formula’s stable `opt/.../bin/node` symlink instead. This prevents Homebrew cleanup from leaving the browser host launcher pointing at a removed Node version; regression-covered.
 - Known limitations: **MCP endpoint has no authentication** — any local process can reach `127.0.0.1:8917` (DNS-rebinding protection exists; token auth is the top Stage 2 hardening item); host must run in-repo (no single binary yet); install script macOS-only; content-script bundle ~135 kB (zod via shared barrel).
 
 ## Current state (Stage 2, 2026-08-02)
@@ -42,13 +43,22 @@
 - Next human decisions are deliberately batched: final Store-facing name, privacy-policy host, minimum reviewer-helper path, publisher ownership/recovery, and later signing-key custody.
 - Public Chrome Web Store v1 is selected; enterprise certification/native-host productisation remains a separate track.
 
-## Chrome Web Store blockers (planning state, 2026-08-04)
+## Chrome Web Store (submitted for review, 2026-08-26)
 
-- Dependency refresh completed 2026-08-04: Zod is 4.4.3, and audited transitive updates include Hono 4.13.1 and NanoID 3.3.18. `./precommit.sh` is green: 241 tests, typecheck, lint, and dependency audit pass.
-- Deterministic bootstrap/final Store packaging and verifier, unified versioning, compliant listing assets, public privacy policy, reviewer-safe helper distribution, required publisher-profile/contact verification, permanent Store ID alignment, exact final-package upload, deferred/manual publication, and future signing-key custody/informed opt-in remain undone.
-- Execution order, evidence gates, automation boundaries, and minimal human batches are canonical in `docs/cws-signed-publishing-plan.md`.
-- No account, dashboard item, signing key, submission, or publication has been created by this planning work.
+- **Status: Under Google review.** Item "Chrome Tab Remote" (ID `pkmcmaegiobodpogiankgdnghfejhpoh`) submitted at v0.1.0 with deferred publishing.
+- H1 (account) and H2a (upload + submit) complete. Publisher ID `32d2830d-5080-4c1f-a200-911687d5b802`.
+- Listing: 3× 640×400 screenshots, description, category, privacy justifications (from `docs/cws-privacy-form.md`), no remote code, data-usage = Website content only.
+- Dependency refresh 2026-08-26: eslint 10.9.1, vitest 4.1.11 (vite 8.2.2 pulled transitively). Precommit green: 244 tests, typecheck, lint, audit 0 vulns.
+- **While under review — action items:**
+  1. Monitor publisher email + dashboard for review outcome (days to weeks).
+  2. H2b (manual publish): on approval → verify staged version/listing → Publish before 30-day expiry.
+  3. H3 (Verified Uploads): after first publication → signing-key custody → opt-in (irreversible; Stage 8).
+  4. Store key swap: manifest still has dev key. Once live, confirm Store ID matches native-host `allowed_origins`; if different, update manifest key + bump version.
+  5. Privacy policy URL: confirm the URL in the dashboard resolves and matches policy content.
+  6. 440×280 promo tile: if CWS requires post-approval, generate and upload.
+  7. 2-Step Verification: confirm enabled on Google account before H2b publish.
+- Execution order and gates: `docs/cws-signed-publishing-plan.md`.
 
 ## Doc map
 
-`AGENTS.md` (durable rules) · `REQUIREMENTS.md` (canonical numbered requirements, status + traceability) · `IDEA.md` (north star) · `RESEARCH.md` (dated research log) · `docs/cws-signed-publishing-plan.md` (canonical Store release plan) · `docs/chrome-tracker-takeaways.md` (+ `.d2`/`.svg` diagram)
+`AGENTS.md` (durable rules) · `REQUIREMENTS.md` (canonical numbered requirements, status + traceability) · `IDEA.md` (north star) · `RESEARCH.md` (dated research log) · `docs/macos-native-host-delivery.md` (macOS-first helper productisation) · `docs/native-host-trust-status.md` (verified trust state and limits) · `docs/cws-signed-publishing-plan.md` (canonical Store release plan) · `docs/chrome-tracker-takeaways.md` (+ `.d2`/`.svg` diagram)

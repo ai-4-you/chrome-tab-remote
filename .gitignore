@@ -8,3 +8,6 @@ cg-task-result-*.md
 .scan-results/
 .pi/goals/
 .pi-subagents/
+# CWS upload-prep artifacts (unpacked bootstrap ZIP; the ZIP itself)
+.store-bootstrap/
+chrome-tab-remote-*-bootstrap.zip

@@ -28,6 +28,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { resolveNativeHostNodePath } from './native-node-path.mjs';
 
 const HOST_NAME = 'com.cgint.chrome_tab_remote';
 
@@ -56,6 +57,7 @@ const cfg = BROWSERS[browser];
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const distEntry = path.resolve(here, '../dist/index.js');
+const nodeExecutable = resolveNativeHostNodePath(process.execPath, existsSync);
 // One shared dispatcher, always in the Chrome-default data dir.
 const launcherPath = path.join(homedir(), BROWSERS.chrome.dataDirName, 'chrome-tab-remote-host.sh');
 const manifestDir = path.join(homedir(), cfg.manifestDir);
@@ -113,11 +115,11 @@ function install(extensionId) {
     '    ;;\n' +
     'esac\n' +
     'export CTR_MCP_PORT CTR_DATA_DIR\n' +
-    `exec "${process.execPath}" "${distEntry}" "$@"\n`;
+    `exec "${nodeExecutable}" "${distEntry}" "$@"\n`;
   writeFileSync(launcherPath, launcher, 'utf8');
   chmodSync(launcherPath, 0o755);
   console.log(`wrote dispatcher ${launcherPath}`);
-  console.log(`  -> ${process.execPath} ${distEntry}`);
+  console.log(`  -> ${nodeExecutable} ${distEntry}`);
   console.log(
     `  chrome -> port ${BROWSERS.chrome.port} · brave -> port ${BROWSERS.brave.port} (detected at spawn)`,
   );

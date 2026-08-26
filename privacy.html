@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chrome Tab Remote — Privacy Policy</title>
+  <style>
+    :root { --fg:#1a1a2e; --muted:#5a5a7a; --line:#e0e0ec; --accent:#3a3a8a; --bg:#fafafe; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; padding: 2.5rem 1.5rem; line-height: 1.65; }
+    main { max-width: 42rem; margin: 0 auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 2.5rem 2.5rem 2rem; box-shadow: 0 2px 12px rgba(58,58,138,.06); }
+    h1 { font-size: 1.5rem; margin-top: 0; color: var(--accent); }
+    h2 { font-size: 1.1rem; margin-top: 1.8rem; padding-bottom: .3rem; border-bottom: 1px solid var(--line); }
+    .meta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .5rem .6rem; border: 1px solid var(--line); vertical-align: top; }
+    th { background: #f4f4fc; }
+    pre { background: #f4f4fc; border: 1px solid var(--line); border-radius: 4px; padding: .8rem 1rem; overflow-x: auto; font-size: .82rem; line-height: 1.5; }
+    ul { padding-left: 1.2rem; }
+    li { margin-bottom: .3rem; }
+    strong { font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Chrome Tab Remote — Privacy Policy</h1>
+  <p class="meta"><strong>Effective:</strong> 2026-08-26 · Applies to the Chrome extension "Chrome Tab Remote" and its locally-installed companion helper (the MCP bridge).<br />
+  Developer: Christian Gintenreiter · Contact: <a href="mailto:christian.gintenreiter@gmail.com">christian.gintenreiter@gmail.com</a></p>
+
+  <h2>What this extension does</h2>
+  <p>Chrome Tab Remote lets you grant an AI agent revocable, origin-pinned access to <strong>exactly one tab</strong> that you explicitly select. The agent can read that tab's content, and — only if you opt in and approve each action individually — interact with it (click, fill, select). You can revoke the grant at any time.</p>
+
+  <h2>What data is involved</h2>
+  <table>
+    <tr><th>Data</th><th>Where</th><th>Notes</th></tr>
+    <tr>
+      <td>Content of the tab you granted (text, headings, links, form controls)</td>
+      <td>Read in-memory by the extension; passed to the local helper</td>
+      <td>Only the tab you explicitly selected. Origin-pinned: the grant suspends automatically if the tab navigates away.</td>
+    </tr>
+    <tr>
+      <td>Viewport screenshot (optional, <strong>default-off</strong>)</td>
+      <td>In-memory only</td>
+      <td>Requires a separate explicit opt-in ("Allow ViewportScreenshot"). Never persisted to disk, never sent to a remote server.</td>
+    </tr>
+    <tr>
+      <td>Grant metadata (origin, expiry, capabilities)</td>
+      <td><code>chrome.storage.session</code></td>
+      <td>Session-only: cleared when the browser session ends. 30-minute maximum lifetime; auto-revoked on tab close or navigation to another origin.</td>
+    </tr>
+    <tr>
+      <td>Local audit log (grant / read / action events)</td>
+      <td><code>chrome.storage.local</code>, capped at 200 entries</td>
+      <td>Stored <strong>on your device only</strong>, visible in the side panel, clearable by you.</td>
+    </tr>
+  </table>
+  <p><strong>No other data is collected.</strong> The extension does not collect account data, browsing history, cross-site behavior, or any information about tabs you did not grant. It contains no analytics, no crash reporting, no advertising, and no third-party SDKs.</p>
+
+  <h2>Where data goes</h2>
+  <pre>your granted tab
+  └─> Chrome Tab Remote extension (browser process, your machine)
+        └─> local companion helper (native messaging, 127.0.0.1 only)
+              └─> local MCP endpoint (localhost only)
+                    └─> your MCP client / AI service  ← YOUR explicit choice</pre>
+  <ul>
+    <li><strong>The extension and the helper make no network requests to any remote server.</strong> All communication stays on your machine (native messaging + localhost).</li>
+    <li>The final step — your MCP client forwarding tool results to an AI model or other service — is configured by <strong>you</strong>, using <strong>your own</strong> client and credentials. The extension neither selects nor sees that destination.</li>
+    <li>The developer of this extension <strong>does not receive, store, or process</strong> any content from granted tabs. We have no servers, no accounts, and no data pipeline.</li>
+  </ul>
+
+  <h2>What we never do</h2>
+  <ul>
+    <li>Sell, transfer, or share your data with third parties.</li>
+    <li>Use your data for advertising, profiling, or any purpose unrelated to the extension's single purpose.</li>
+    <li>Use or transfer your data to determine creditworthiness or for lending.</li>
+    <li>Read or act on any tab you did not explicitly grant.</li>
+    <li>Send page content to remote servers or third parties.</li>
+    <li>Collect usage analytics, telemetry, or crash reports.</li>
+  </ul>
+
+  <h2>Your controls</h2>
+  <ul>
+    <li><strong>Per-tab grant:</strong> access begins only when you explicitly select a tab; the grant is pinned to that tab's origin and expires after 30 minutes at most.</li>
+    <li><strong>Per-action approval:</strong> actions (click, fill, select) execute only after your explicit approval in the side panel; unapproved requests auto-deny after 110 seconds.</li>
+    <li><strong>Revoke anytime:</strong> the side panel provides an immediate revoke; closing the tab or navigating to another origin also revokes automatically.</li>
+    <li><strong>Inspect and clear:</strong> the local audit log (last 200 events) is visible in the side panel and clearable by you.</li>
+    <li><strong>Permissions:</strong> the extension uses <code>activeTab</code>, <code>alarms</code>, <code>tabs</code>, <code>scripting</code>, <code>storage</code>, <code>sidePanel</code>, <code>nativeMessaging</code>, <code>notifications</code>, and optional <code>http://*/*</code> / <code>https://*/*</code> host permissions. All are scoped to the granted-tab boundary described in the Chrome Web Store listing; <code>tabs</code> is used only to enforce that boundary (origin change → suspend, tab close → revoke).</li>
+  </ul>
+
+  <h2>Data storage</h2>
+  <p>All data lives on your device: session storage (grant state, wiped at browser exit) and local storage (capped audit ring-buffer, clearable). There are no remote databases, no caches on third-party infrastructure, and no persistent on-disk capture of tab content.</p>
+
+  <h2>Children</h2>
+  <p>This extension is not directed at children, and we do not knowingly collect data from anyone under 13.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>Material changes will be announced via the Chrome Web Store listing before they take effect. When in doubt, re-read the latest version at the URL linked from the Store listing.</p>
+
+  <h2>Limited Use statement</h2>
+  <p>In accordance with the Chrome Web Store program policies: any information that Chrome Tab Remote receives from Google (for example via the Chrome Web Store APIs) will adhere to the Chrome Web Store User Data Policy, including the Limited Use requirements. The extension itself sends no data to Google or any other remote service.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or concerns: <a href="mailto:christian.gintenreiter@gmail.com">christian.gintenreiter@gmail.com</a></p>
+</main>
+</body>
+</html>

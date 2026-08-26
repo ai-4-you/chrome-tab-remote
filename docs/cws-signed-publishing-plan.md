@@ -1,6 +1,6 @@
 # Chrome Web Store signed-publishing plan
 
-> **Canonical publication plan** · as-of 2026-08-04 · status: **planning; no submission started**
+> **Canonical publication plan** · as-of 2026-08-26 · status: **submitted for review 2026-08-26; awaiting Google review**
 >
 > Scope: public Chrome Web Store publication of the extension, permanent Store-ID alignment with the native host, and signed future updates through Verified CRX Uploads. Full enterprise certification and cross-platform native-host productisation remain a separate delivery track.
 >
@@ -16,22 +16,40 @@ This plan does **not** claim that Store approval proves enterprise security. It 
 
 The extension is functionally mature, but the release path is not ready.
 
-| Area | Evidence as of 2026-08-04 | Status |
+| Area | Evidence as of 2026-08-26 | Status |
 |---|---|---|
-| Product behavior | 231/231 tests pass; typecheck and lint pass | Ready baseline |
-| Dependency gate | `./precommit.sh` fails because `hono <4.12.34` has a moderate ReDoS advisory | **Blocking** |
-| Distribution decision | Existing 2026-08-02 analysis selected a public listing; enterprise policy can still force-install a public item by ID | Decided for v1 |
-| Publisher identity | No permanent owner/recovery/strong-auth evidence, required publisher name, or verified contact email is recorded | Complete in H1 |
-| Store-facing name | Existing 2026-08-02 analysis selected **AI Tab Grant**; explicit current-user confirmation is not recorded, and code still says Chrome Tab Remote | Confirm in the pre-Stage-2 decision reply |
-| Package | Build exists; no deterministic bootstrap/final ZIP commands, version transition, candidate lock, or artifact verifier | **Blocking** |
-| Version | Manifest is `0.1.0`; extension package is `0.0.0` | **Blocking** |
-| Extension identity | Manifest pins a development public key; the native host allowlists the resulting ID | Draft Store identity required |
-| Reviewer experience | Panel says only `disconnected`; helper requires this repo, Node, a build, and a macOS-only installer | **Highest rejection risk** |
-| Privacy | No public policy URL or finalized dashboard disclosures | **Blocking** |
-| Listing assets | 128×128 icon exists; its artwork padding is unverified. Existing screenshot is 1322×1630, not an accepted Store screenshot size. Required 440×280 promo image is absent | **Blocking** |
-| Publication control | Deferred publishing is selected by this plan but no H2a submission/H2b manual-publish evidence exists | Post-review release gate |
-| Signing | Verified CRX Uploads selected for future updates; custody/recovery and informed irreversible opt-in remain undecided | Post-first-publication gate |
-| Planning state | Canonical plan and reconciled CWS companion documents are committed; semantic reconciliation is complete; no publication implementation has started | Stage 0 complete |
+| Product behavior | 244/244 tests pass; typecheck, lint, and dependency audit pass | Ready baseline |
+| Dependency gate | `./precommit.sh` green; Hono 4.13.5, 0 vulnerabilities | ✅ Resolved |
+| Distribution decision | Public listing; enterprise policy can still force-install a public item by ID | Decided for v1 |
+| Publisher identity | Publisher ID `32d2830d-…`; name, verified email, trader declaration, address, notifications all set | ✅ Complete (H1) |
+| Store-facing name | Submitted as **Chrome Tab Remote**; rename to “AI Tab Grant” not confirmed | Pending user decision |
+| Package | Bootstrap ZIP v0.1.0 (no key) uploaded to create item; final ZIP with Store key not yet built | Partial — final ZIP pending key |
+| Version | Submitted v0.1.0; next update must be > 0.1.0 | v0.1.0 live in review |
+| Extension identity | Store item ID `pkmcmaegiobodpogiankgdnghfejhpoh`; manifest still carries dev key | Key swap pending post-review |
+| Reviewer experience | 3× 640×400 screenshots uploaded; helper requires repo + Node + macOS installer | Monitor reviewer feedback |
+| Privacy | Justifications filled from `docs/cws-privacy-form.md`; “No remote code” selected; data-usage: Website content only | ✅ Submitted |
+| Listing assets | Icon 128×128; 3 screenshots 640×400 uploaded | ✅ Uploaded |
+| Publication control | H2a done — submitted with deferred publishing selected | ⏳ Awaiting review |
+| Signing | Verified CRX Uploads selected for future updates; custody/recovery undecided | Post-first-publication gate |
+| Planning state | H1 + H2a complete; under Google review as of 2026-08-26 | **Review in progress** |
+
+## Status update — 2026-08-26 (submission complete, review pending)
+
+- **H1 done:** Publisher account created (ID `32d2830d-5080-4c1f-a200-911687d5b802`); account page complete (publisher name, verified contact email, trader declaration, address, notification preferences).
+- **H2a done:** Item **Chrome Tab Remote** (ID `pkmcmaegiobodpogiankgdnghfejhpoh`) created; bootstrap ZIP v0.1.0 uploaded; listing filled (description, category, 3× 640×400 screenshots); privacy form completed (per `docs/cws-privacy-form.md`); **submitted for review** with deferred publishing.
+- **Staged-item expiry:** 30 days after passing review (per Google). The live dashboard date is authoritative.
+
+### While under review — action items (do not forget)
+
+1. **Monitor** publisher email + dashboard for review outcome (expected: days to a few weeks).
+2. **H2b (manual publish):** Once approved → verify staged version/listing → click **Publish** before the 30-day expiry.
+3. **H3 (Verified Uploads):** After first publication → set up signing-key custody → opt in (irreversible; Stage 8).
+4. **Store key swap:** Manifest still carries the *development* key. Once the item is live, confirm the Store-assigned extension ID matches the native-host `allowed_origins`. If it differs: update `manifest.json` `key`, rebuild, bump version (> 0.1.0), re-run verifier, submit update.
+5. **Privacy policy URL:** Confirm the URL entered in the dashboard resolves and matches the actual policy content. (Currently: to be confirmed — GitHub Pages or repo README link.)
+6. **440×280 promo tile:** If CWS requires it post-approval, generate and upload (not yet created).
+7. **2-Step Verification:** Confirm 2SV is enabled on the Google account before H2b publish (CWS requirement).
+
+---
 
 ## Fixed principles and corrected assumptions
 
