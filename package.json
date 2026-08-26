@@ -17,10 +17,10 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "esbuild": "^0.28.1",
-    "eslint": "^9.39.0",
+    "eslint": "^10.9.1",
     "jsdom": "^30.0.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }
