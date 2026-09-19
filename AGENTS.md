@@ -8,6 +8,13 @@ A **trust-first Chrome extension** (plus backend communication) that lets a user
 
 ## Collaboration rules (durable)
 
+### Deployment and value bar — non-negotiable
+
+- Ship only changes backed by enough evidence that they can be **blindly and honestly trusted for deployment without user code review**. If deploy safety remains uncertain, deliver **no change**.
+- Ship only changes that **demonstrably improve the real workflow**—not theoretically, possibly, or maybe. If the benefit is unproven, deliver **no change**.
+- The agent owns the proof: tests alone are insufficient when material runtime risk remains. Never call work deployable while a consequential uncertainty is unresolved.
+- Every repository agent must self-organize to keep this bar active during work and persist future clarifications in the narrowest canonical repository-owned document; chat acknowledgment alone is not memory.
+
 - **2026-08-02:** Git commits must NOT carry a `Co-Authored-By: Claude …` trailer (user decision; overrides the default).
 
 ## Scope decisions (durable)
