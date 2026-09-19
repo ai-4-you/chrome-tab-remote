@@ -192,6 +192,14 @@ describe('renderTabReadManyResult', () => {
     });
     expect(text).toBe('### n2\nfirst\n\n### n7\nstale_ref: Ref n7 is from an older snapshot.');
   });
+
+  it('labels cap-punched empty text instead of calling the element empty', () => {
+    const text = renderTabReadManyResult({
+      results: [{ ref: 'n9', ok: true, entry: { text: '', truncated: true } }],
+    });
+    expect(text).toBe('### n9\n[text not returned — aggregate 60,000-character cap already reached]');
+    expect(text).not.toContain('[empty');
+  });
 });
 
 describe('renderFindResult', () => {

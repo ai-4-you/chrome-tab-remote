@@ -112,9 +112,13 @@ export function renderTabReadManyResult(result: TabReadManyResult): string {
   return result.results
     .map((item) => {
       const body = item.ok
-        ? item.entry?.text === ''
-          ? '[empty — the element has no text content or value]'
-          : `${item.entry?.text ?? ''}${item.entry?.truncated ? '\n[truncated: aggregate 60,000-character cap]' : ''}`
+        ? item.entry?.truncated
+          ? item.entry.text === ''
+            ? '[text not returned — aggregate 60,000-character cap already reached]'
+            : `${item.entry.text}\n[truncated: aggregate 60,000-character cap]`
+          : item.entry?.text === ''
+            ? '[empty — the element has no text content or value]'
+            : (item.entry?.text ?? '')
         : `${item.error?.code ?? 'unknown_ref'}: ${item.error?.message ?? 'Read failed.'}`;
       return `### ${item.ref}\n${body}`;
     })

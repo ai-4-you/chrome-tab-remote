@@ -1,8 +1,8 @@
 // Content script — injected programmatically (chrome.scripting.executeScript)
 // into the ONE granted tab. Bundled as IIFE. Guards against double injection
 // (re-confirm re-injects into the same tab).
-import type { PlanStep, SnapshotNode, SnapshotResult } from '@ctr/shared';
-import { FIND_MAX_MATCHES } from '@ctr/shared';
+import type { PlanStep, SnapshotResult } from '@ctr/shared';
+import { findNodes } from '@ctr/shared';
 import { executePlan } from './actions.js';
 import { waitForQuiet } from './settle.js';
 import { captureSnapshot, classifyMissingRef, describeElement, readRef } from './snapshot.js';
@@ -17,8 +17,7 @@ if (!window.__ctrContentInjected) {
   window.__ctrContentInjected = true;
 
   let lastRefMap: Map<string, Element> | null = null;
-  /** Flat node/element index from the latest capture; tab_find never recaptures. */
-  let lastSnapshotIndex: Map<string, { node: SnapshotNode; el: Element }> | null = null;
+  /** Latest captured snapshot; tab_find searches its tree, never the live DOM. */
   let lastSnapshotResult: SnapshotResult | null = null;
   // Monotonic ref counter across snapshots (see classifyMissingRef): refBase is
   // where the CURRENT snapshot started, nextStart is where the next one will.
@@ -45,16 +44,6 @@ if (!window.__ctrContentInjected) {
     return el;
   }
 
-  function indexSnapshot(result: SnapshotResult, refMap: Map<string, Element>): Map<string, { node: SnapshotNode; el: Element }> {
-    const index = new Map<string, { node: SnapshotNode; el: Element }>();
-    const walk = (node: SnapshotNode): void => {
-      const el = refMap.get(node.ref);
-      if (el) index.set(node.ref, { node: { ...node, children: undefined }, el });
-      for (const child of node.children ?? []) walk(child);
-    };
-    walk(result.tree);
-    return index;
-  }
 
   chrome.runtime.onMessage.addListener(
     (msg: unknown, _sender, sendResponse: (response: unknown) => void) => {
@@ -65,7 +54,6 @@ if (!window.__ctrContentInjected) {
           const filter = m.filter === 'interactive' ? 'interactive' : 'full';
           const capture = captureSnapshot(document, filter, nextStart);
           lastRefMap = capture.refMap;
-          lastSnapshotIndex = indexSnapshot(capture.result, capture.refMap);
           lastSnapshotResult = capture.result;
           refBase = nextStart;
           nextStart = capture.nextStart;
@@ -172,30 +160,22 @@ if (!window.__ctrContentInjected) {
       }
 
       if (m.type === 'ctrFind') {
-        if (!lastSnapshotIndex || !lastSnapshotResult) {
+        if (!lastSnapshotResult) {
           sendResponse({ ok: false, error: { code: 'unknown_ref', message: 'No snapshot captured yet — call tab_snapshot first.' } });
           return false;
         }
         const query = typeof (m as { query?: unknown }).query === 'string'
-          ? (m as { query: string }).query.toLowerCase()
+          ? (m as { query: string }).query
           : '';
         const role = typeof (m as { role?: unknown }).role === 'string'
           ? (m as { role: string }).role
           : undefined;
-        const allMatches = [...lastSnapshotIndex.values()]
-          .map(({ node }) => node)
-          .filter((node) => {
-            const haystack = `${node.name} ${node.value ?? ''} ${node.href ?? ''}`.toLowerCase();
-            return (!role || node.role === role) && (query === '' || haystack.includes(query));
-          });
+        // Search the LATEST SNAPSHOT's tree, not the live DOM; findNodes is the
+        // single matching path shared with the tested core.
+        const { matches, total } = findNodes(lastSnapshotResult.tree, query, role);
         sendResponse({
           ok: true,
-          result: {
-            url: lastSnapshotResult.url,
-            title: lastSnapshotResult.title,
-            total: allMatches.length,
-            matches: allMatches.slice(0, FIND_MAX_MATCHES),
-          },
+          result: { url: lastSnapshotResult.url, title: lastSnapshotResult.title, total, matches },
         });
         return false;
       }

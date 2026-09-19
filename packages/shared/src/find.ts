@@ -3,7 +3,7 @@
 import type { SnapshotNode } from './snapshot.js';
 
 /** Max matches returned by tab_find; the total is still reported. */
-export const FIND_MAX_MATCHES = 100;
+export const FIND_MAX_MATCHES = 30;
 
 /**
  * Depth-first search over a snapshot tree: case-insensitive substring match on

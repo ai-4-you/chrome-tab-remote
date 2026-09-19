@@ -27,8 +27,6 @@ import { ToolCallError } from './bridge.js';
 
 export const DEFAULT_MCP_PORT = 8917;
 export const MCP_PATH = '/mcp';
-/** Find may inspect a large snapshot index; allow a bounded long-call budget. */
-export const FIND_TOOL_TIMEOUT_MS = 30_000;
 
 /** MCP port: CTR_MCP_PORT if set and valid, else 8917. Invalid values are reported via `warn`. */
 export function resolveMcpPort(
@@ -174,7 +172,7 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
       try {
         const extra: Record<string, unknown> = { query: args.query };
         if (args.role !== undefined) extra['role'] = args.role;
-        const raw = await bridge.callTool('tab_find', grantParams(args.grantId, extra), FIND_TOOL_TIMEOUT_MS);
+        const raw = await bridge.callTool('tab_find', grantParams(args.grantId, extra));
         const parsed = FindResultSchema.safeParse(raw);
         return parsed.success ? textResult(renderFindResult(parsed.data)) : okResult(raw);
       } catch (error) {
@@ -295,8 +293,8 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
         'Read the FULL text content of many node refs in ONE call, returning one labelled block in ' +
         'the supplied order for every ref. Unknown or stale refs are reported inline (the page may ' +
         'have changed — run tab_snapshot if any are stale); password values stay [redacted]. The ' +
-        'combined text is capped at about 60KB, with the affected ref marked truncated. Same ' +
-        'observe-only consent boundary as tab_read.',
+        'combined text is capped at 60,000 characters; refs after the cap is reached return without ' +
+        'text and are labelled as such. Same observe-only consent boundary as tab_read.',
       inputSchema: {
         grantId: GRANT_ID_INPUT,
         refs: z
@@ -395,11 +393,11 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     'tab_find',
     {
       description:
-        'Search the granted tab for elements whose name, value, or URL contains the query ' +
+        'Search the LATEST tab_snapshot for elements whose name, value, or URL contains the query ' +
         '(case-insensitive), optionally filtered by role (e.g. "button", "link", "textbox"). ' +
-        'Returns matching nodes as snapshot lines from the LATEST tab_snapshot; it does not ' +
-        'capture again or invalidate existing refs. If nothing matches, take a tab_snapshot first ' +
-        'and retry. Much cheaper than reading a full tab_snapshot on large pages.',
+        'It does not capture again or invalidate refs. If nothing matches, or the page may have ' +
+        'changed since the last snapshot, take a NEW tab_snapshot and retry. Much cheaper than ' +
+        'a full snapshot on large pages.',
       inputSchema: {
         grantId: GRANT_ID_INPUT,
         query: z.string().min(1).describe('Substring to search for, e.g. "login".'),

@@ -41,14 +41,14 @@ describe('findNodes', () => {
       ref: 'n0',
       role: 'document',
       name: 'x',
-      children: Array.from({ length: 140 }, (_, i) => ({
+      children: Array.from({ length: 40 }, (_, i) => ({
         ref: `n${i + 1}`,
         role: 'link',
         name: `x ${i}`,
       })),
     };
     const { matches, total } = findNodes(wide, 'x');
-    expect(total).toBe(141);
+    expect(total).toBe(41);
     expect(matches).toHaveLength(FIND_MAX_MATCHES);
   });
 

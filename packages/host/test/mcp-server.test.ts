@@ -170,6 +170,16 @@ describe('createToolHandlers', () => {
     );
   });
 
+  it('tab_read_many labels cap-punched empty text instead of calling the element empty', async () => {
+    const callTool = vi.fn(async () => ({
+      results: [{ ref: 'n9', ok: true, entry: { text: '', truncated: true } }],
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabReadMany({ refs: ['n9'] });
+    expect(textOf(result)).toBe('### n9\n[text not returned — aggregate 60,000-character cap already reached]');
+    expect(textOf(result)).not.toContain('[empty');
+  });
+
   it('tab_read falls back to JSON for unexpected result shapes', async () => {
     const callTool = vi.fn(async () => ({ unexpected: true }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
@@ -253,7 +263,7 @@ describe('createToolHandlers', () => {
     }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     const result = await handlers.tabFind({ query: 'login', role: 'button' });
-    expect(callTool).toHaveBeenCalledWith('tab_find', { query: 'login', role: 'button' }, 30_000);
+    expect(callTool).toHaveBeenCalledWith('tab_find', { query: 'login', role: 'button' });
     expect(textOf(result)).toContain('- n52 button "Login"');
     expect(textOf(result)).toContain('does not invalidate them');
   });
