@@ -76,9 +76,9 @@ export const ActionResultSchema = z.object({
 export type ActionResult = z.infer<typeof ActionResultSchema>;
 
 /**
- * Result of an executed plan (all act tools return this): the steps that ran,
- * the first failure if any, the honest page state, and a fresh post-settle
- * interactive snapshot so the agent re-orients without another round trip.
+ * Result of an executed plan (all act tools return this): the steps dispatched,
+ * the first failure if any, and the honest page state. This is a receipt, not
+ * an observation; callers use tab_snapshot or tab_find to inspect the result.
  */
 export const PlanResultSchema = z.object({
   executed: z.array(ActionResultSchema),
@@ -90,7 +90,6 @@ export const PlanResultSchema = z.object({
     })
     .optional(),
   pageState: z.enum(PAGE_STATES),
-  snapshot: SnapshotResultSchema.optional(),
 });
 export type PlanResult = z.infer<typeof PlanResultSchema>;
 

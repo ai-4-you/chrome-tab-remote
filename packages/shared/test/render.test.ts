@@ -148,12 +148,14 @@ describe('renderActionLine / renderPlanResult', () => {
     );
   });
 
-  it('renders a settled plan with numbered steps and the embedded snapshot', () => {
-    const text = renderPlanResult({ executed: [CLICK], pageState: 'settled', snapshot: base });
+  it('renders a settled plan as a dispatch receipt without snapshot content or a stale banner', () => {
+    const text = renderPlanResult({ executed: [CLICK], pageState: 'settled' });
     expect(text).toContain('1. Clicked button "Save" (n7)');
     expect(text).toContain('Page settled after the action(s).');
-    expect(text).toContain('fresh refs — ALL earlier refs are stale');
-    expect(text).toContain('url: https://app.example.com/');
+    expect(text).toContain('This is a dispatch receipt');
+    expect(text).toContain('Call tab_snapshot (or tab_find)');
+    expect(text).not.toContain('url: https://app.example.com/');
+    expect(text).not.toContain('stale');
   });
 
   it('renders partial failure honestly: failed step + no further execution', () => {
@@ -168,11 +170,11 @@ describe('renderActionLine / renderPlanResult', () => {
   it('warns loudly when the page was still changing (never fakes settledness)', () => {
     const text = renderPlanResult({ executed: [CLICK], pageState: 'still-changing' });
     expect(text).toContain('STILL CHANGING');
-    expect(text).toContain('may be incomplete');
+    expect(text).toContain('Call tab_snapshot once it settles');
   });
 
   it('reports interruption with unknown completed-step count', () => {
-    const text = renderPlanResult({ executed: [], pageState: 'interrupted', snapshot: base });
+    const text = renderPlanResult({ executed: [], pageState: 'interrupted' });
     expect(text).toContain('INTERRUPTED');
     expect(text).toContain('unknown');
     expect(text).not.toContain('1. Clicked');

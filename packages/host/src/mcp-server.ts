@@ -286,8 +286,10 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     'the side panel — this call can take up to 2 minutes; tell the user to look at the ' +
     'panel. Exception: if the user enabled auto-approve on the grant (list_grants shows ' +
     '"auto-approve ON"), actions run immediately without the pause. approval_denied means ' +
-    'the user said no: do NOT retry the same action. After any action the page may change ' +
-    '— take a new tab_snapshot before the next one.';
+    'the user said no: do NOT retry the same action. This call returns a receipt of what was ' +
+    'dispatched to which element and the page settle state, NOT the page; to verify the effect, ' +
+    'call tab_snapshot or tab_find. After any action the page may change — take a new ' +
+    'tab_snapshot before the next one.';
 
   server.registerTool(
     'tab_click',

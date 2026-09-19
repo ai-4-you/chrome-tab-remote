@@ -307,7 +307,7 @@ describe('router', () => {
       expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('executes an approved click: describe → approval → re-validate → execute, fully audited', async () => {
+    it('executes an approved click as a receipt: describe → approval → re-validate → execute, fully audited', async () => {
       const grant = await mintActGrant();
       mock.tabs.sendMessage
         .mockResolvedValueOnce({ ok: true, result: { target: 'button "Save"' } }) // ctrDescribe
@@ -326,6 +326,7 @@ describe('router', () => {
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       expect(res.result).toEqual(ACTION_RESULT);
+      expect(res.result).not.toHaveProperty('snapshot');
       expect(mock.tabs.sendMessage).toHaveBeenNthCalledWith(1, 1, { type: 'ctrDescribe', ref: 'n7' });
       expect(mock.tabs.sendMessage).toHaveBeenNthCalledWith(2, 1, {
         type: 'ctrPlan',
@@ -341,6 +342,21 @@ describe('router', () => {
       for (const entry of auditEntries.filter((e) => e.type.startsWith('action_'))) {
         expect(entry.tabId).toBe(1);
       }
+    });
+
+    it('returns an interrupted receipt without a recovery snapshot when action delivery is lost', async () => {
+      const grant = await mintActGrant();
+      await setAutoApprove(grant.grantId, true);
+      mock.tabs.sendMessage
+        .mockResolvedValueOnce({ ok: true, result: { target: 'button "Save"' } }) // ctrDescribe
+        .mockRejectedValueOnce(new Error('content script unloaded')); // ctrPlan
+
+      const res = await handleToolCall(call('tab_click', { ref: 'n7' }));
+
+      expect(res).toMatchObject({ ok: true, result: { executed: [], pageState: 'interrupted' } });
+      if (!res.ok) return;
+      expect(res.result).not.toHaveProperty('snapshot');
+      expect(mock.tabs.sendMessage).toHaveBeenCalledTimes(2);
     });
 
     it('denial fails closed with approval_denied and never touches the page', async () => {

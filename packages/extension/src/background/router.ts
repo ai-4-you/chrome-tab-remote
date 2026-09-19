@@ -286,22 +286,6 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   return { res: mapContentResponse(req.id, resp), grantId, tabId };
 }
 
-/** Wait for a navigating tab to finish loading (best effort, capped). */
-function waitForTabComplete(tabId: number, maxMs = 5000): Promise<void> {
-  return new Promise((resolve) => {
-    const listener = (id: number, info: { status?: string }): void => {
-      if (id === tabId && info.status === 'complete') done();
-    };
-    const done = (): void => {
-      clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(listener);
-      resolve();
-    };
-    const timer = setTimeout(done, maxMs);
-    chrome.tabs.onUpdated.addListener(listener);
-  });
-}
-
 /** Human line for one step, shown in approvals and audit. */
 function stepDetail(step: PlanStep): string | undefined {
   if (step.kind === 'fill') return `type ${JSON.stringify(step.text ?? '')}`;
@@ -313,7 +297,7 @@ function stepDetail(step: PlanStep): string | undefined {
  * The act path (plan-unified, C-10): mode gate → build/validate steps →
  * describe all targets (stale refs rejected before the user is asked) →
  * gate (approval or auto-approve) → re-validation → sequential execution
- * with settle + fresh snapshot, honest about interruptions.
+ * with settle state, producing a receipt that is honest about interruptions.
  */
 async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolResult> {
   if (grant.mode !== 'act') {
@@ -424,19 +408,7 @@ async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolRes
   try {
     execResp = await chrome.tabs.sendMessage(grant.tabId, { type: 'ctrPlan', steps });
   } catch {
-    await waitForTabComplete(grant.tabId);
-    let snapResp: unknown;
-    try {
-      snapResp = await sendToContentScript(grant.tabId, { type: 'ctrSnapshot', filter: 'interactive' });
-    } catch {
-      return errResult(req.id, 'tab_unreachable', 'The page did not recover after the action(s).');
-    }
-    const snapMapped = mapContentResponse(req.id, snapResp);
-    return okResult(req.id, {
-      executed: [],
-      pageState: 'interrupted',
-      snapshot: snapMapped.ok ? snapMapped.result : undefined,
-    });
+    return okResult(req.id, { executed: [], pageState: 'interrupted' });
   }
   return mapContentResponse(req.id, execResp);
 }

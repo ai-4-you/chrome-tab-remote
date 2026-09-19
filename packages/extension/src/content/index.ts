@@ -110,19 +110,15 @@ if (!window.__ctrContentInjected) {
               sendResponse({ ok: false, error: { code: failedStep.code, message: failedStep.message } });
               return;
             }
-            // Wait for the DOM to go quiet (honestly capped), then re-orient.
+            // Wait for the DOM to go quiet (honestly capped). This is a dispatch
+            // receipt, not an observation: callers take tab_snapshot to inspect it.
             const settled = await waitForQuiet(document);
-            const capture = captureSnapshot(document, 'interactive', nextStart);
-            lastRefMap = capture.refMap;
-            refBase = nextStart;
-            nextStart = capture.nextStart;
             sendResponse({
               ok: true,
               result: {
                 executed,
                 failedStep,
                 pageState: settled ? 'settled' : 'still-changing',
-                snapshot: capture.result,
               },
             });
           } catch (e) {

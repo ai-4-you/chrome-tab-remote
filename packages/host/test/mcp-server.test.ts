@@ -183,16 +183,20 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toContain('timeout:');
   });
 
-  it('action tools render the plan result and pass the long approval timeout', async () => {
+  it('action tools render a dispatch receipt without snapshot content or a stale banner', async () => {
     const callTool = vi.fn(async () => ({
       executed: [{ action: 'click', ref: 'n7', target: 'button "Save"' }],
       pageState: 'settled',
     }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     const result = await handlers.tabAction('tab_click', { ref: 'n7' });
+    const text = textOf(result);
     expect(callTool).toHaveBeenCalledWith('tab_click', { ref: 'n7' }, 120_000);
-    expect(textOf(result)).toContain('1. Clicked button "Save" (n7)');
-    expect(textOf(result)).toContain('Page settled');
+    expect(text).toContain('1. Clicked button "Save" (n7)');
+    expect(text).toContain('Page settled');
+    expect(text).toContain('This is a dispatch receipt');
+    expect(text).not.toContain('url:');
+    expect(text).not.toContain('stale');
   });
 
   it('action tools forward text/value and an explicit grantId', async () => {

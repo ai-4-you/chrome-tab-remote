@@ -81,20 +81,18 @@ export function renderActionLine(result: ActionResult): string {
 }
 
 const PAGE_STATE_LINES: Record<PlanResult['pageState'], string> = {
-  settled: 'Page settled after the action(s).',
+  settled:
+    'Page settled after the action(s). This is a dispatch receipt — it does not show the page. ' +
+    'Call tab_snapshot (or tab_find) to observe the result.',
   'still-changing':
-    'CAUTION: the page was STILL CHANGING when captured — the snapshot below may be ' +
-    'incomplete. If results look wrong, take a new tab_snapshot.',
+    'CAUTION: the page was STILL CHANGING when the action finished. Call tab_snapshot once it ' +
+    'settles before relying on anything about the page.',
   interrupted:
-    'Execution was INTERRUPTED by a page navigation or reload (likely caused by an ' +
-    'action). How many steps completed before it is unknown — verify against the ' +
-    'snapshot below before doing anything else.',
+    'Execution was INTERRUPTED by a page navigation or reload. How many steps completed before it ' +
+    'is unknown — call tab_snapshot before doing anything else.',
 };
 
-/**
- * Render a plan result: executed steps, first failure, honest page state, and
- * the fresh snapshot (whose refs are the only valid ones now).
- */
+/** Render a plan result: executed steps, first failure, and honest page state. */
 export function renderPlanResult(result: PlanResult): string {
   const out: string[] = [];
   if (result.pageState !== 'interrupted') {
@@ -106,10 +104,6 @@ export function renderPlanResult(result: PlanResult): string {
     );
   }
   out.push(PAGE_STATE_LINES[result.pageState]);
-  if (result.snapshot) {
-    out.push('', 'Current page (fresh refs — ALL earlier refs are stale now):');
-    out.push(renderSnapshot(result.snapshot));
-  }
   return out.join('\n');
 }
 
