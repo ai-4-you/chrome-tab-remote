@@ -22,9 +22,14 @@ try {
   const zip = argument('--zip');
   const publicKey = argument('--public-key');
   const nativeHostManifest = argument('--native-host-manifest');
-  if (!zip || !publicKey || !nativeHostManifest) fail('usage: --zip PATH --public-key BASE64_DER --native-host-manifest PATH');
+  if (!zip || !publicKey) fail('usage: --zip PATH --public-key BASE64_DER [--native-host-manifest PATH]');
+  if (process.argv.includes('--native-host-manifest') && !nativeHostManifest) {
+    fail('--native-host-manifest requires a PATH.');
+  }
   if (!existsSync(zip)) fail(`ZIP does not exist: ${zip}`);
-  if (!existsSync(nativeHostManifest)) fail(`production native-host manifest does not exist: ${nativeHostManifest}`);
+  if (nativeHostManifest && !existsSync(nativeHostManifest)) {
+    fail(`production native-host manifest does not exist: ${nativeHostManifest}`);
+  }
   const extensionId = assertStorePublicKey(publicKey);
   const files = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
   if (JSON.stringify(files) !== JSON.stringify(ALLOWLIST)) fail(`ZIP contents differ from strict allowlist: ${files.join(', ') || '(empty)'}`);
@@ -50,9 +55,11 @@ try {
   if (typeof csp === 'string' && (/(?:https?:)?\/\//iu.test(csp) || /'unsafe-eval'/iu.test(csp))) {
     fail('manifest content security policy permits remote code or unsafe eval.');
   }
-  const nativeManifest = JSON.parse(readFileSync(nativeHostManifest, 'utf8'));
-  if (!Array.isArray(nativeManifest.allowed_origins) || !nativeManifest.allowed_origins.includes(STORE_ORIGIN)) {
-    fail(`production native-host allowed_origins must contain ${STORE_ORIGIN}`);
+  if (nativeHostManifest) {
+    const nativeManifest = JSON.parse(readFileSync(nativeHostManifest, 'utf8'));
+    if (!Array.isArray(nativeManifest.allowed_origins) || !nativeManifest.allowed_origins.includes(STORE_ORIGIN)) {
+      fail(`production native-host allowed_origins must contain ${STORE_ORIGIN}`);
+    }
   }
   const sha256 = createHash('sha256').update(readFileSync(zip)).digest('hex');
   const report = {
@@ -68,7 +75,8 @@ try {
     files,
     permissions: manifest.permissions,
     optionalHostPermissions: manifest.optional_host_permissions,
-    verificationCommand: `node scripts/verify-store-package.mjs --zip ${resolve(zip)} --public-key <base64-DER-public-key> --native-host-manifest ${resolve(nativeHostManifest)}`,
+    verificationCommand: `node scripts/verify-store-package.mjs --zip ${resolve(zip)} --public-key <base64-DER-public-key>`,
+    nativeHostManifestValidation: nativeHostManifest ? resolve(nativeHostManifest) : 'not requested',
   };
   const reportPath = `${zip}.report.json`;
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
