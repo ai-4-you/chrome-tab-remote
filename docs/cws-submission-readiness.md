@@ -123,11 +123,11 @@ Google's [image requirements](https://developer.chrome.com/docs/webstore/images)
 
 Resolution: upload the ZIP as an unpublished draft → **Package → View public key** → replace the current `key` value with the store's → rebuild. Dev and production then share one ID and one `allowed_origins` entry.
 
-### B7 — No deterministic packaging, unified version source, or exact replacement upload
+### B7 — Deterministic package and key-aligned update candidate
 
-`dist/` is gitignored and there is no script producing a submission artifact. Hand-zipping risks shipping the wrong tree. Version metadata also drifts: `manifest.json` says `0.1.0`, while `packages/extension/package.json` says `0.0.0`.
+`packages/extension/package.json` is the authoritative extension version source (currently `0.1.1`); the build injects it into the packaged manifest. `npm run package:store` builds only from an explicit `dist/` allowlist, normalizes archive inputs, and runs `npm run verify:store-package`, which writes a JSON release report.
 
-The first dashboard upload is an identity bootstrap, not the release candidate. After pinning the Store public key, packaged content changes: Google's update guidance requires a new upload with a strictly larger version. The final path is bootstrap ZIP → Store key → higher-version final ZIP → exact-artifact rehearsal → **Upload New Package** → verify dashboard final version → submit deferred.
+Both commands fail closed until supplied with the Dashboard base64 DER public key and a production native-host manifest. The verifier derives the ID, requires exactly `pkmcmaegiobodpogiankgdnghfejhpoh`, and requires `chrome-extension://pkmcmaegiobodpogiankgdnghfejhpoh/` in `allowed_origins`. The checked-in development key derives to `nkgapnnfibaccdmmelpnekmdebkcbebk`, so no final candidate can be built now. After pinning the Store public key, the path is public key → v0.1.1 final ZIP → exact-artifact rehearsal → **Upload New Package** → verify dashboard final version → submit deferred.
 
 After Verified Uploads opt-in, future updates become signed `.crx` uploads. Implementation candidate—not yet verified in this repository: sign with Chrome's pack-extension flags or a reviewed CRX3 library. The key path must come from protected release configuration, never the repo.
 

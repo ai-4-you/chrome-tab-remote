@@ -11,3 +11,5 @@ cg-task-result-*.md
 # CWS upload-prep artifacts (unpacked bootstrap ZIP; the ZIP itself)
 .store-bootstrap/
 chrome-tab-remote-*-bootstrap.zip
+# Locally generated Store candidates and reports. Never commit a candidate.
+release/

@@ -44,7 +44,7 @@ chrome.scripting.executeScript is used to inject the bundled content script (con
 ### storage
 
 ```
-chrome.storage.session stores active grant metadata (origin, expiry, capabilities) and is automatically cleared when the browser session ends. chrome.storage.local stores a capped audit ring-buffer (most recent 200 entries) of grant/read/action events for the user to inspect in the side panel. No data is sent to any remote server.
+chrome.storage.session stores active grant metadata (origin, expiry, capabilities) and is automatically cleared when the browser session ends. chrome.storage.local stores a capped audit ring-buffer (most recent 500 entries) of grant/read/action events for the user to inspect and clear in the side panel. The local helper separately appends audit.jsonl in its data directory (default ~/.chrome-tab-remote), rotating at 10 MiB and retaining one prior generation; the side-panel clear control does not clear that file. No data is sent to any remote server.
 ```
 
 ### sidePanel

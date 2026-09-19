@@ -44,20 +44,17 @@
 - Next human decisions are deliberately batched: final Store-facing name, privacy-policy host, minimum reviewer-helper path, publisher ownership/recovery, and later signing-key custody.
 - Public Chrome Web Store v1 is selected; enterprise certification/native-host productisation remains a separate track.
 
-## Chrome Web Store (submitted for review, 2026-08-26)
+## Chrome Web Store (v0.1.0 public; v0.1.1 update preparation, 2026-09-19)
 
-- **Status: Under Google review.** Item "Chrome Tab Remote" (ID `pkmcmaegiobodpogiankgdnghfejhpoh`) submitted at v0.1.0 with deferred publishing.
-- H1 (account) and H2a (upload + submit) complete. Publisher ID `32d2830d-5080-4c1f-a200-911687d5b802`.
+- **Status: Published - public.** The live Publisher Dashboard showed item "Chrome Tab Remote" (ID `pkmcmaegiobodpogiankgdnghfejhpoh`) at v0.1.0 as public on 2026-09-19. A normal v0.1.1 update is prepared in source only; no candidate has been built or uploaded.
+- Initial account, upload, review, and manual publication are complete. Publisher ID `32d2830d-5080-4c1f-a200-911687d5b802`.
 - Listing: 3× 640×400 screenshots, description, category, privacy justifications (from `docs/cws-privacy-form.md`), no remote code, data-usage = Website content only.
 - Dependency refresh 2026-08-26: eslint 10.9.1, vitest 4.1.11 (vite 8.2.2 pulled transitively). Precommit green: 244 tests, typecheck, lint, audit 0 vulns.
-- **While under review — action items:**
-  1. Monitor publisher email + dashboard for review outcome (days to weeks).
-  2. H2b (manual publish): on approval → verify staged version/listing → Publish before 30-day expiry.
-  3. H3 (Verified Uploads): after first publication → signing-key custody → opt-in (irreversible; Stage 8).
-  4. Store key swap: manifest still has dev key. Once live, confirm Store ID matches native-host `allowed_origins`; if different, update manifest key + bump version.
-  5. Privacy policy URL: confirm the URL in the dashboard resolves and matches policy content.
-  6. 440×280 promo tile: if CWS requires post-approval, generate and upload.
-  7. 2-Step Verification: confirm enabled on Google account before H2b publish.
+- **v0.1.1 update gates:**
+  1. User copies Dashboard **Package → View public key**; the candidate verifier must prove it derives to the published Store ID.
+  2. User confirms the Privacy-tab URL resolves to the corrected public policy.
+  3. Agent builds and verifies one locked ZIP, then updates/reinstalls the native-host manifest for the published ID.
+  4. User uploads that exact ZIP through **Package → Upload New Package**, reviews the updated privacy declaration, and submits the update. Verified Uploads remains a separate, later human-only decision.
 - Execution order and gates: `docs/cws-signed-publishing-plan.md`.
 
 ## Doc map

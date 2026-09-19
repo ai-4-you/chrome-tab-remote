@@ -14,7 +14,8 @@ Chrome Tab Remote lets you grant an AI agent revocable, origin-pinned access to 
 | Content of the tab you granted (text, headings, links, form controls) | Read in-memory by the extension; passed to the local helper | Only the tab you explicitly selected. Origin-pinned: the grant suspends automatically if the tab navigates away. |
 | Viewport screenshot (optional, **default-off**) | In-memory only | Requires a separate explicit opt-in ("Allow ViewportScreenshot"). Never persisted to disk, never sent to a remote server. |
 | Grant metadata (origin, expiry, capabilities) | `chrome.storage.session` | Session-only: cleared when the browser session ends. 30-minute maximum lifetime; auto-revoked on tab close or navigation to another origin. |
-| Local audit log (grant / read / action events) | `chrome.storage.local`, capped at the most recent 200 entries | Stored **on your device only**, visible in the side panel, clearable by you. |
+| Extension audit ring (grant / read / action events) | `chrome.storage.local`, capped at the most recent 500 entries | Stored **on your device only**, visible in the side panel, and clearable by you. |
+| Helper audit log | Append-only `audit.jsonl` in the helper data directory (default `~/.chrome-tab-remote`) | Stored on your device only. The helper rotates it at 10 MiB and retains one prior generation (`audit.jsonl.1`). This host-file log is not side-panel-clearable. |
 
 **No other data is collected.** The extension does not collect account data, browsing history, cross-site behavior, or any information about tabs you did not grant. It contains no analytics, no crash reporting, no advertising, and no third-party SDKs.
 
@@ -46,12 +47,12 @@ your granted tab
 - **Per-tab grant:** access begins only when you explicitly select a tab; the grant is pinned to that tab's origin and expires after 30 minutes at most.
 - **Per-action approval:** actions (click, fill, select) execute only after your explicit approval in the side panel; unapproved requests auto-deny after 110 seconds.
 - **Revoke anytime:** the side panel provides an immediate revoke; closing the tab or navigating to another origin also revokes automatically.
-- **Inspect and clear:** the local audit log (last 200 events) is visible in the side panel and clearable by you.
+- **Inspect and clear:** the extension audit ring (last 500 events) is visible in the side panel and clearable by you. The helper's separate `audit.jsonl` file is not cleared by this control.
 - **Permissions:** the extension uses `activeTab`, `alarms`, `tabs`, `scripting`, `storage`, `sidePanel`, `nativeMessaging`, `notifications`, and optional `http://*/*` / `https://*/*` host permissions. All are scoped to the granted-tab boundary described in the Chrome Web Store listing; `tabs` is used only to enforce that boundary (origin change → suspend, tab close → revoke). No broad host permission is exercised on any tab you did not grant.
 
 ## Data storage
 
-All data lives on your device: session storage (grant state, wiped at browser exit) and local storage (capped audit ring-buffer, clearable). There are no remote databases, no caches on third-party infrastructure, and no persistent on-disk capture of tab content.
+All data lives on your device: session storage (grant state, wiped at browser exit); local storage (a capped, side-panel-clearable extension audit ring); and the helper's append-only local `audit.jsonl` file (default `~/.chrome-tab-remote`, rotated at 10 MiB with one prior generation retained). There are no remote databases, no caches on third-party infrastructure, and no persistent on-disk capture of tab content.
 
 ## Children
 

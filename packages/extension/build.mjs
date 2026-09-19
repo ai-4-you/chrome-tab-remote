@@ -1,6 +1,6 @@
 // esbuild bundling for the MV3 extension (no vite, by design — small reviewable surface).
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,9 +39,15 @@ await build({
   format: 'esm',
 });
 
-// Static files.
+// Static files. The extension package version is the authoritative release
+// version; inject it into the built manifest so normal `npm run build` remains
+// the development workflow while Store artifacts cannot drift.
+const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+const packageVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+manifest.version = packageVersion;
+writeFileSync(join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
 const statics = [
-  ['manifest.json', 'manifest.json'],
   ['icon128.png', 'icon128.png'],
   ['src/sidepanel/sidepanel.html', 'sidepanel.html'],
   ['src/sidepanel/sidepanel.css', 'sidepanel.css'],

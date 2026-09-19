@@ -12,7 +12,9 @@
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
-    "precommit": "npm run typecheck && npm run lint && npm run test && npm audit --omit=dev --audit-level=moderate"
+    "precommit": "npm run typecheck && npm run lint && npm run test && npm audit --omit=dev --audit-level=moderate",
+    "package:store": "node scripts/package-store.mjs",
+    "verify:store-package": "node scripts/verify-store-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
