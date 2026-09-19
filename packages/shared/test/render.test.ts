@@ -7,6 +7,7 @@ import {
   renderGrants,
   renderPlanResult,
   renderSnapshot,
+  renderTabReadManyResult,
   type Grant,
   type SnapshotResult,
 } from '@ctr/shared';
@@ -181,8 +182,20 @@ describe('renderActionLine / renderPlanResult', () => {
   });
 });
 
+describe('renderTabReadManyResult', () => {
+  it('renders ordered labelled blocks and inline failures', () => {
+    const text = renderTabReadManyResult({
+      results: [
+        { ref: 'n2', ok: true, entry: { text: 'first' } },
+        { ref: 'n7', ok: false, error: { code: 'stale_ref', message: 'Ref n7 is from an older snapshot.' } },
+      ],
+    });
+    expect(text).toBe('### n2\nfirst\n\n### n7\nstale_ref: Ref n7 is from an older snapshot.');
+  });
+});
+
 describe('renderFindResult', () => {
-  it('renders matches as snapshot lines with the fresh-refs warning', () => {
+  it('renders matches without invalidating snapshot refs', () => {
     const text = renderFindResult({
       url: 'https://app.example.com/',
       title: 'Example',
@@ -195,13 +208,13 @@ describe('renderFindResult', () => {
     expect(text).toContain('2 match(es)');
     expect(text).toContain('- n52 button "Login"');
     expect(text).toContain('- n60 link "Login help" https://app.example.com/help');
-    expect(text).toContain('earlier refs are stale');
+    expect(text).toContain('does not invalidate them');
   });
 
   it('gives a helpful zero-matches message', () => {
     const text = renderFindResult({ url: 'https://x.example/', title: 'X', total: 0, matches: [] });
     expect(text).toContain('No matches');
-    expect(text).toContain('fresh snapshot');
+    expect(text).toContain('tab_snapshot first');
   });
 });
 

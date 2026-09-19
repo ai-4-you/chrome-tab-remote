@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { GrantSchema } from './grant.js';
 import { ToolErrorSchema } from './errors.js';
-import { SnapshotNodeSchema, SnapshotResultSchema } from './snapshot.js';
+import { SnapshotNodeSchema } from './snapshot.js';
 
 /** MCP tool names exposed by the host; bridged 1:1 over native messaging. */
 export const TOOL_NAMES = [
   'tab_snapshot',
   'tab_read',
+  'tab_read_many',
   'tab_find',
   'tab_screenshot_viewport',
   'list_grants',
@@ -93,7 +94,27 @@ export const PlanResultSchema = z.object({
 });
 export type PlanResult = z.infer<typeof PlanResultSchema>;
 
-/** Result of tab_find: matching nodes from a FRESH snapshot (earlier refs go stale). */
+/** One tab_read_many result; failures are inline so no requested ref is dropped. */
+export const TabReadManyItemSchema = z.object({
+  ref: z.string().regex(/^n\d+$/),
+  ok: z.boolean(),
+  entry: z
+    .object({
+      text: z.string(),
+      /** True when this entry was cut by the batch aggregate cap. */
+      truncated: z.boolean().optional(),
+    })
+    .optional(),
+  error: ToolErrorSchema.optional(),
+});
+export type TabReadManyItem = z.infer<typeof TabReadManyItemSchema>;
+
+export const TabReadManyResultSchema = z.object({
+  results: z.array(TabReadManyItemSchema),
+});
+export type TabReadManyResult = z.infer<typeof TabReadManyResultSchema>;
+
+/** Result of tab_find: matching nodes from the latest snapshot (refs remain valid). */
 export const FindResultSchema = z.object({
   url: z.string(),
   title: z.string(),

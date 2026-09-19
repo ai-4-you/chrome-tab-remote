@@ -16,8 +16,10 @@ import {
   renderGrants,
   renderPlanResult,
   renderSnapshot,
+  renderTabReadManyResult,
   SNAPSHOT_FILTERS,
   SnapshotResultSchema,
+  TabReadManyResultSchema,
   TabReadResultSchema,
   ViewportScreenshotResultSchema,
 } from '@ctr/shared';
@@ -25,6 +27,8 @@ import { ToolCallError } from './bridge.js';
 
 export const DEFAULT_MCP_PORT = 8917;
 export const MCP_PATH = '/mcp';
+/** Find may inspect a large snapshot index; allow a bounded long-call budget. */
+export const FIND_TOOL_TIMEOUT_MS = 30_000;
 
 /** MCP port: CTR_MCP_PORT if set and valid, else 8917. Invalid values are reported via `warn`. */
 export function resolveMcpPort(
@@ -139,6 +143,15 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
         return errorResult(error);
       }
     },
+    tabReadMany: async ({ grantId, refs }: { grantId?: string; refs: string[] }): Promise<CallToolResult> => {
+      try {
+        const raw = await bridge.callTool('tab_read_many', grantParams(grantId, { refs }));
+        const parsed = TabReadManyResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderTabReadManyResult(parsed.data)) : okResult(raw);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
     tabAction: async (
       tool: ActToolName,
       args: { grantId?: string; ref?: string; text?: string; value?: string; steps?: PlanStep[] },
@@ -161,7 +174,7 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
       try {
         const extra: Record<string, unknown> = { query: args.query };
         if (args.role !== undefined) extra['role'] = args.role;
-        const raw = await bridge.callTool('tab_find', grantParams(args.grantId, extra));
+        const raw = await bridge.callTool('tab_find', grantParams(args.grantId, extra), FIND_TOOL_TIMEOUT_MS);
         const parsed = FindResultSchema.safeParse(raw);
         return parsed.success ? textResult(renderFindResult(parsed.data)) : okResult(raw);
       } catch (error) {
@@ -275,6 +288,27 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
     handlers.tabRead,
   );
 
+  server.registerTool(
+    'tab_read_many',
+    {
+      description:
+        'Read the FULL text content of many node refs in ONE call, returning one labelled block in ' +
+        'the supplied order for every ref. Unknown or stale refs are reported inline (the page may ' +
+        'have changed — run tab_snapshot if any are stale); password values stay [redacted]. The ' +
+        'combined text is capped at about 60KB, with the affected ref marked truncated. Same ' +
+        'observe-only consent boundary as tab_read.',
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        refs: z
+          .array(z.string().regex(/^n\d+$/))
+          .min(1)
+          .max(100)
+          .describe('1–100 node refs from the latest tab_snapshot, returned in this exact order.'),
+      },
+    },
+    ({ grantId, refs }) => handlers.tabReadMany({ grantId, refs }),
+  );
+
   const REF_INPUT = z
     .string()
     .regex(/^n\d+$/)
@@ -363,9 +397,9 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
       description:
         'Search the granted tab for elements whose name, value, or URL contains the query ' +
         '(case-insensitive), optionally filtered by role (e.g. "button", "link", "textbox"). ' +
-        'Returns matching nodes as snapshot lines. Much cheaper than reading a full ' +
-        'tab_snapshot on large pages. IMPORTANT: tab_find takes a fresh snapshot internally — ' +
-        'all refs from earlier snapshots become stale; use the returned refs.',
+        'Returns matching nodes as snapshot lines from the LATEST tab_snapshot; it does not ' +
+        'capture again or invalidate existing refs. If nothing matches, take a tab_snapshot first ' +
+        'and retry. Much cheaper than reading a full tab_snapshot on large pages.',
       inputSchema: {
         grantId: GRANT_ID_INPUT,
         query: z.string().min(1).describe('Substring to search for, e.g. "login".'),

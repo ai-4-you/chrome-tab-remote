@@ -155,6 +155,21 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toBe('[empty — the element has no text content or value]');
   });
 
+  it('tab_read_many renders labelled blocks in supplied order, including stale refs', async () => {
+    const callTool = vi.fn(async () => ({
+      results: [
+        { ref: 'n9', ok: true, entry: { text: 'second supplied ref' } },
+        { ref: 'n2', ok: false, error: { code: 'stale_ref', message: 'Ref n2 is from an older snapshot.' } },
+      ],
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabReadMany({ grantId: GRANT.grantId, refs: ['n9', 'n2'] });
+    expect(callTool).toHaveBeenCalledWith('tab_read_many', { grantId: GRANT.grantId, refs: ['n9', 'n2'] });
+    expect(textOf(result)).toBe(
+      '### n9\nsecond supplied ref\n\n### n2\nstale_ref: Ref n2 is from an older snapshot.',
+    );
+  });
+
   it('tab_read falls back to JSON for unexpected result shapes', async () => {
     const callTool = vi.fn(async () => ({ unexpected: true }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
@@ -229,7 +244,7 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toContain('STILL CHANGING');
   });
 
-  it('tab_find renders matches with the fresh-refs warning', async () => {
+  it('tab_find renders matches without invalidating snapshot refs', async () => {
     const callTool = vi.fn(async () => ({
       url: 'https://docs.example.com/',
       title: 'Docs',
@@ -238,9 +253,9 @@ describe('createToolHandlers', () => {
     }));
     const handlers = createToolHandlers(stubBridge({ callTool }));
     const result = await handlers.tabFind({ query: 'login', role: 'button' });
-    expect(callTool).toHaveBeenCalledWith('tab_find', { query: 'login', role: 'button' });
+    expect(callTool).toHaveBeenCalledWith('tab_find', { query: 'login', role: 'button' }, 30_000);
     expect(textOf(result)).toContain('- n52 button "Login"');
-    expect(textOf(result)).toContain('earlier refs are stale');
+    expect(textOf(result)).toContain('does not invalidate them');
   });
 
   it('request_grant renders the granted result via the grants prose', async () => {

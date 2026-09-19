@@ -209,6 +209,26 @@ describe('router', () => {
     expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrRead', ref: 'n3' });
   });
 
+  it('forwards tab_read_many through the same observe path, including an act grant', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act');
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+    mock.tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      result: { results: [{ ref: 'n3', ok: true, entry: { text: 'hello' } }] },
+    });
+
+    const res = await handleToolCall(call('tab_read_many', { grantId: grant.grantId, refs: ['n3'] }));
+    expect(res.ok).toBe(true);
+    expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrReadMany', refs: ['n3'] });
+  });
+
+  it('rejects malformed tab_read_many refs before contacting the content script', async () => {
+    const grant = await mintGrant(1, ORIGIN);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+    expectError(await handleToolCall(call('tab_read_many', { grantId: grant.grantId, refs: [] })), 'invalid_target');
+    expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('maps a content-script error (unknown_ref) through to the tool result', async () => {
     const grant = await mintGrant(1, ORIGIN);
     mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });

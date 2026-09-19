@@ -2,7 +2,7 @@
 // consumer is a language model, so readable text IS the machine format
 // (see AGENTS.md design principles).
 import type { Grant } from './grant.js';
-import type { ActionResult, FindResult, PlanResult } from './messages.js';
+import type { ActionResult, FindResult, PlanResult, TabReadManyResult } from './messages.js';
 import type { SnapshotNode, SnapshotResult } from './snapshot.js';
 
 function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
@@ -107,13 +107,26 @@ export function renderPlanResult(result: PlanResult): string {
   return out.join('\n');
 }
 
+/** Render tab_read_many as one labelled, single-read-shaped block per requested ref. */
+export function renderTabReadManyResult(result: TabReadManyResult): string {
+  return result.results
+    .map((item) => {
+      const body = item.ok
+        ? item.entry?.text === ''
+          ? '[empty — the element has no text content or value]'
+          : `${item.entry?.text ?? ''}${item.entry?.truncated ? '\n[truncated: aggregate 60,000-character cap]' : ''}`
+        : `${item.error?.code ?? 'unknown_ref'}: ${item.error?.message ?? 'Read failed.'}`;
+      return `### ${item.ref}\n${body}`;
+    })
+    .join('\n\n');
+}
+
 /** Render tab_find matches as one snapshot-style line each. */
 export function renderFindResult(result: FindResult): string {
   if (result.total === 0) {
     return (
       `No matches on "${result.title}" (${result.url}). Try a shorter/different query, ` +
-      'a different role, or a full tab_snapshot. Note: tab_find took a fresh snapshot — ' +
-      'earlier refs are now stale.'
+      'a different role, or take a tab_snapshot first and retry.'
     );
   }
   const out = [`${result.total} match(es) on "${result.title}" (${result.url}):`];
@@ -123,6 +136,6 @@ export function renderFindResult(result: FindResult): string {
   if (result.total > result.matches.length) {
     out.push(`… ${result.total - result.matches.length} more — narrow the query.`);
   }
-  out.push('Refs come from a FRESH snapshot taken by tab_find — all earlier refs are stale.');
+  out.push('Refs come from the latest tab_snapshot; tab_find does not invalidate them.');
   return out.join('\n');
 }

@@ -258,7 +258,7 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
   }
 
   // Observe tools.
-  let message: { type: string; ref?: string; filter?: string; query?: string; role?: string };
+  let message: { type: string; ref?: string; refs?: string[]; filter?: string; query?: string; role?: string };
   if (req.tool === 'tab_snapshot') {
     const filter = req.params['filter'] === 'interactive' ? 'interactive' : 'full';
     message = { type: 'ctrSnapshot', filter };
@@ -269,6 +269,12 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
     }
     message = { type: 'ctrFind', query };
     if (typeof req.params['role'] === 'string') message.role = req.params['role'];
+  } else if (req.tool === 'tab_read_many') {
+    const refs = req.params['refs'];
+    if (!Array.isArray(refs) || refs.length < 1 || refs.length > 100 || !refs.every((ref) => typeof ref === 'string' && /^n\d+$/.test(ref))) {
+      return { res: errResult(req.id, 'invalid_target', 'refs must contain 1–100 node refs.'), grantId, tabId };
+    }
+    message = { type: 'ctrReadMany', refs };
   } else {
     const ref = req.params['ref'];
     if (typeof ref !== 'string' || ref.length === 0) {
