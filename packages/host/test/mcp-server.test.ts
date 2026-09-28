@@ -1,8 +1,10 @@
+import { createConnection } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type { Grant } from '@ctr/shared';
 import { ToolCallError } from '../src/bridge.js';
 import {
   createToolHandlers,
+  startMcpHttpServer,
   resolveMcpPort,
   DEFAULT_MCP_PORT,
   type ToolBridge,
@@ -254,6 +256,81 @@ describe('createToolHandlers', () => {
     expect(textOf(result)).toContain('STILL CHANGING');
   });
 
+  it('tab_scroll forwards direction/pixels/behavior under the approval timeout and renders the metrics', async () => {
+    const callTool = vi.fn(async () => ({
+      executed: [
+        {
+          action: 'scroll',
+          ref: 'page',
+          target: 'div.feed',
+          scrollMetrics: { scrollTop: 800, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+        },
+      ],
+      pageState: 'settled',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabAction('tab_scroll', {
+      grantId: GRANT.grantId,
+      direction: 'down',
+      pixels: 800,
+      behavior: 'instant',
+    });
+    expect(callTool).toHaveBeenCalledWith(
+      'tab_scroll',
+      { grantId: GRANT.grantId, direction: 'down', pixels: 800, behavior: 'instant' },
+      120_000,
+    );
+    const text = textOf(result);
+    expect(text).toContain('Scrolled div.feed to scrollTop 800');
+    expect(text).toContain('atBottom: no');
+    expect(text).toContain('dispatch receipt');
+  });
+
+  it('tab_scroll element mode forwards the ref only when the caller gives one', async () => {
+    const callTool = vi.fn(async () => ({ executed: [], pageState: 'settled' }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    await handlers.tabAction('tab_scroll', { grantId: GRANT.grantId, ref: 'n42' });
+    expect(callTool).toHaveBeenCalledWith('tab_scroll', { grantId: GRANT.grantId, ref: 'n42' }, 120_000);
+  });
+
+  it('tab_scroll falls back to raw JSON when the act result breaks its schema', async () => {
+    // Same safety net as tab_snapshot/tab_read: a malformed receipt must not be
+    // silently rendered as if it were trustworthy prose.
+    const callTool = vi.fn(async () => ({
+      executed: [
+        {
+          action: 'scroll',
+          ref: 'page',
+          target: 'div.feed',
+          scrollMetrics: { scrollTop: 800.5, scrollHeight: 5000, clientHeight: 900 }, // fractional + missing atBottom
+        },
+      ],
+      pageState: 'settled',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabAction('tab_scroll', { grantId: GRANT.grantId, direction: 'down' });
+    expect(textOf(result)).not.toContain('Scrolled');
+    expect(JSON.parse(textOf(result)).executed[0].scrollMetrics.scrollTop).toBe(800.5);
+  });
+
+  it('tab_scroll rejections keep the structured code and gain a Next step', async () => {
+    // The router's concrete invalid_target message must survive into the model-facing
+    // text with the recovery instruction, not collapse into a generic action_failed.
+    const handlers = createToolHandlers(stubBridge({
+      callTool: vi.fn(async () => {
+        throw new ToolCallError(
+          'invalid_target',
+          'No scrollable region found on the page (no overflow container).',
+        );
+      }),
+    }));
+    const result = await handlers.tabAction('tab_scroll', { grantId: GRANT.grantId, direction: 'down' });
+    const text = textOf(result);
+    expect(text).toContain('invalid_target: No scrollable region found on the page');
+    expect(text).toContain('Next step:');
+    expect(text).toContain('tab_snapshot');
+  });
+
   it('tab_find renders matches without invalidating snapshot refs', async () => {
     const callTool = vi.fn(async () => ({
       url: 'https://docs.example.com/',
@@ -326,5 +403,56 @@ describe('resolveDataDir', () => {
 
   it('defaults to ~/.chrome-tab-remote', () => {
     expect(resolveDataDir({})).toMatch(/\/\.chrome-tab-remote$/);
+  });
+});
+
+describe('MCP tool registration (tools/list over the live endpoint)', () => {
+  /** The endpoint is loopback-only and Host-checked, so speak to it raw. */
+  function listTools(port: number): Promise<{ tools: { name: string; description?: string; inputSchema?: Record<string, unknown> }[] }> {
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    const request =
+      'POST /mcp HTTP/1.1\r\n' +
+      `Host: 127.0.0.1:${port}\r\n` +
+      'Content-Type: application/json\r\n' +
+      'Accept: application/json, text/event-stream\r\n' +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+      'Connection: close\r\n' +
+      '\r\n' +
+      body;
+    return new Promise((resolve, reject) => {
+      const socket = createConnection({ host: '127.0.0.1', port }, () => socket.write(request));
+      socket.setEncoding('utf8');
+      let data = '';
+      socket.on('data', (chunk: string) => (data += chunk));
+      socket.on('end', () => {
+        // The frame is a JSON-RPC response possibly preceded by SSE "data: " lines.
+        const line = data
+          .split(/\r?\n/)
+          .find((l) => l.startsWith('{') || l.startsWith('data: '));
+        if (!line) throw new Error(`No JSON-RPC frame in response:\n${data}`);
+        resolve(JSON.parse(line.replace(/^data: /, '')).result);
+      });
+      socket.on('error', reject);
+    });
+  }
+
+  it('advertises tab_scroll with both modes and the page ref in its schema', async () => {
+    const handle = await startMcpHttpServer(stubBridge(), { port: 0 });
+    try {
+      const { tools } = await listTools(handle.port);
+      const scroll = tools.find((t) => t.name === 'tab_scroll');
+      expect(scroll, 'tab_scroll must be registered for agents to find it').toBeDefined();
+      const plan = tools.find((t) => t.name === 'tab_plan');
+      // Agents only learn scroll is plan-eligible if the description says so.
+      expect(plan!.description).toContain('scroll');
+      const props = scroll!.inputSchema!.properties as Record<string, { description?: string }>;
+      expect(Object.keys(props).sort()).toEqual(['behavior', 'direction', 'grantId', 'pixels', 'ref']);
+      expect(scroll!.description).toContain('PAGE mode');
+      expect(scroll!.description).toContain('atBottom');
+      expect(props['ref']!.description).toContain('n42');
+      expect(props['pixels']!.description).toContain('800');
+    } finally {
+      await handle.close();
+    }
   });
 });

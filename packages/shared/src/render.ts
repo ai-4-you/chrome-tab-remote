@@ -69,15 +69,37 @@ export function renderGrants(grants: Grant[], now: number): string {
     .join('\n');
 }
 
-/** One executed step as prose, e.g. 'Clicked button "Save" (n7)'. */
+/**
+ * One executed step as prose, e.g. 'Clicked button "Save" (n7)'. Scroll metrics are
+ * rendered, not merely carried: the receipt is the ONLY observation of a scroll, so
+ * an unrendered atBottom would be dead data (AGENTS.md prose principle).
+ */
 export function renderActionLine(result: ActionResult): string {
   const verb =
     result.action === 'click'
       ? `Clicked ${result.target}`
       : result.action === 'fill'
         ? `Filled ${result.target} with ${JSON.stringify(result.text ?? '')}`
-        : `Selected ${JSON.stringify(result.value ?? '')} in ${result.target}`;
+        : result.action === 'select'
+          ? `Selected ${JSON.stringify(result.value ?? '')} in ${result.target}`
+          : `Scrolled ${result.target}${scrollMetricsClause(result)}`;
   return `${verb} (${result.ref})`;
+}
+
+function scrollMetricsClause(result: ActionResult): string {
+  const m = result.scrollMetrics;
+  if (!m) return '';
+  const remaining = Math.max(0, m.scrollHeight - m.scrollTop - m.clientHeight);
+  // atBottom is derived with a 2 px tolerance, so exact equality is the wrong test:
+  // flag a bottom reached mid-scroll (a real position) as a possible lazy boundary,
+  // while a page that never moved (scrollTop 0) stays a plain, unflagged bottom.
+  const note =
+    m.atBottom && m.scrollTop > 0 ? ', bottom reached — lazy content may still load' : '';
+  return (
+    ` to scrollTop ${m.scrollTop} of scrollHeight ${m.scrollHeight}` +
+    ` (viewport ${m.clientHeight}px, ${remaining}px remaining, ` +
+    `atBottom: ${m.atBottom ? 'yes' : 'no'}${note})`
+  );
 }
 
 const PAGE_STATE_LINES: Record<PlanResult['pageState'], string> = {

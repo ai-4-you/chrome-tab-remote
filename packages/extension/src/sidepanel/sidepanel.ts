@@ -6,7 +6,7 @@ import { originOf } from '@ctr/shared';
 
 interface PendingApproval {
   opId: string;
-  steps: { kind: 'click' | 'fill' | 'select'; target: string; detail?: string }[];
+  steps: { kind: 'click' | 'fill' | 'select' | 'scroll'; target: string; detail?: string }[];
   origin: string;
   deadline: number;
 }

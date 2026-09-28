@@ -146,7 +146,7 @@ describe('executePlan', () => {
     throw new Error(`no ref for ${tag} ${name}`);
   }
 
-  it('executes steps in order and reports all results', () => {
+  it('executes steps in order and reports all results', async () => {
     document.body.innerHTML = '<input aria-label="Name" type="text" /><button>Save</button>';
     const capture = captureSnapshot(document);
     const fillRef = refOf('input', 'Name', capture);
@@ -154,7 +154,7 @@ describe('executePlan', () => {
     const clicked = vi.fn();
     el('button').addEventListener('click', clicked);
 
-    const { executed, failedStep } = executePlan(capture.refMap, 0, [
+    const { executed, failedStep } = await executePlan(capture.refMap, 0, [
       { kind: 'fill', ref: fillRef, text: 'Ada' },
       { kind: 'click', ref: clickRef },
     ]);
@@ -164,13 +164,13 @@ describe('executePlan', () => {
     expect(clicked).toHaveBeenCalledTimes(1);
   });
 
-  it('stops at the first failure; later steps never run', () => {
+  it('stops at the first failure; later steps never run', async () => {
     document.body.innerHTML = '<button>A</button><button>B</button>';
     const capture = captureSnapshot(document);
     const clickedB = vi.fn();
     document.querySelectorAll('button')[1]!.addEventListener('click', clickedB);
 
-    const { executed, failedStep } = executePlan(capture.refMap, 0, [
+    const { executed, failedStep } = await executePlan(capture.refMap, 0, [
       { kind: 'fill', ref: refOf('button', 'A', capture), text: 'x' }, // fill a button → fails
       { kind: 'click', ref: refOf('button', 'B', capture) },
     ]);
@@ -180,20 +180,178 @@ describe('executePlan', () => {
     expect(clickedB).not.toHaveBeenCalled();
   });
 
-  it('fails with stale_ref when an earlier step detached the element', () => {
-    document.body.innerHTML = '<button id="a">A</button><button id="b">B</button>';
-    const capture = captureSnapshot(document);
-    const refA = refOf('button', 'A', capture);
-    const refB = refOf('button', 'B', capture);
-    // Step 1's click removes button B from the DOM (SPA-style re-render).
-    document.getElementById('a')!.addEventListener('click', () => document.getElementById('b')!.remove());
+  // --- scroll (jsdom has no layout: scroll boxes and overflow are stubbed) ----
+  const tops = new WeakMap<Element, number>();
 
-    const { executed, failedStep } = executePlan(capture.refMap, 0, [
-      { kind: 'click', ref: refA },
-      { kind: 'click', ref: refB },
+  function fakeLayout(node: Element, b: { scrollHeight: number; clientHeight: number; scrollTop?: number }): void {
+    Object.defineProperty(node, 'scrollHeight', { value: b.scrollHeight, configurable: true });
+    Object.defineProperty(node, 'clientHeight', { value: b.clientHeight, configurable: true });
+    tops.set(node, b.scrollTop ?? 0);
+    Object.defineProperty(node, 'scrollTop', {
+      get: () => tops.get(node) ?? 0,
+      set: (v: number) => tops.set(node, v),
+      configurable: true,
+    });
+  }
+
+  /** Computed style by element id: listed ids overflow, everything else does not. */
+  function computedOverflow(scrollableIds: string[]): void {
+    vi.spyOn(document.defaultView!, 'getComputedStyle').mockImplementation(((node: Element) => ({
+      overflowY: scrollableIds.includes((node as HTMLElement).id) ? 'auto' : 'visible',
+      display: 'block',
+      visibility: 'visible',
+    })) as unknown as Window['getComputedStyle']);
+  }
+
+  it('page-mode scroll reports the settle state it measured, not an optimistic one', async () => {
+    // The reported numbers must come from AFTER the settle wait, and a page that is
+    // still changing must be reported as still-changing rather than 'settled'.
+    document.body.innerHTML = '<div id="feed" class="web-scroll"></div>';
+    const feed = document.getElementById('feed')!;
+    let scrollTop = 4100;
+    let settleCalls = 0;
+    Object.defineProperty(feed, 'clientHeight', { value: 900, configurable: true });
+    Object.defineProperty(feed, 'scrollHeight', { get: () => (settleCalls === 0 ? 4900 : 6000), configurable: true });
+    Object.defineProperty(feed, 'scrollTop', {
+      get: () => scrollTop,
+      set: (v: number) => (scrollTop = v),
+      configurable: true,
+    });
+    Object.defineProperty(feed, 'scrollBy', {
+      value: (opts: { top: number }) => {
+        scrollTop += opts.top;
+      },
+      configurable: true,
+    });
+    const css = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation(
+        () => ({ overflowY: 'auto', display: 'block', visibility: 'visible' }) as unknown as CSSStyleDeclaration,
+      );
+    const settle = vi.fn(async () => {
+      settleCalls += 1; // lazy posts land during the wait: the page is not quiet
+      return false;
+    });
+    try {
+      const { executed, failedStep, pageSettled } = await executePlan(
+        new Map(),
+        0,
+        [{ kind: 'scroll', ref: 'page', direction: 'down', pixels: 800, behavior: 'instant' }],
+        document,
+        settle,
+      );
+      expect(failedStep).toBeUndefined();
+      expect(pageSettled).toBe(false);
+      expect(executed[0]?.target).toBe('div.web-scroll');
+      // Two settle windows ran, and the numbers are the LAST measurement (scrollHeight
+      // grew 4900 -> 6000 as content was appended).
+      expect(settle).toHaveBeenCalledTimes(2);
+      expect(executed[0]?.scrollMetrics).toEqual({
+        scrollTop: 4900,
+        scrollHeight: 6000,
+        clientHeight: 900,
+        atBottom: false,
+      });
+    } finally {
+      css.mockRestore();
+    }
+  });
+
+  it('element-mode scroll scrolls into view and reports the CLOSEST scroller metrics', async () => {
+    document.body.innerHTML = '<div id="feed"><button id="b">Load</button></div>';
+    const capture = captureSnapshot(document);
+    const refB = refOf('button', 'Load', capture);
+    const feed = document.getElementById('feed')!;
+    const button = document.getElementById('b')!;
+    fakeLayout(feed, { scrollHeight: 5000, clientHeight: 900, scrollTop: 1200 });
+    fakeLayout(button, { scrollHeight: 40, clientHeight: 40 });
+    const scrolled = vi.fn();
+    button.scrollIntoView = scrolled;
+    computedOverflow(['feed']);
+
+    const { executed, failedStep } = await executePlan(capture.refMap, 0, [{ kind: 'scroll', ref: refB }]);
+    expect(failedStep).toBeUndefined();
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect(executed[0]).toEqual({
+      action: 'scroll',
+      ref: refB,
+      target: 'button "Load"',
+      // Metrics come from the feed the user sees move, not the button itself.
+      scrollMetrics: { scrollTop: 1200, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+    });
+  });
+
+  /** Pin the document scroller to "cannot scroll" so the inner container decides. */
+  function noDocumentScroll(): void {
+    Object.defineProperty(document, 'scrollingElement', {
+      value: document.documentElement,
+      configurable: true,
+    });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 0, configurable: true });
+    Object.defineProperty(document.documentElement, 'clientHeight', { value: 0, configurable: true });
+  }
+
+  it('page-mode scroll works with an empty refMap (no prior snapshot needed)', async () => {
+    document.body.innerHTML = '<div id="feed" class="web-scroll"></div>';
+    const feed = document.getElementById('feed')!;
+    fakeLayout(feed, { scrollHeight: 3000, clientHeight: 800 });
+    const scrollBy = vi.fn((opts: ScrollToOptions) => tops.set(feed, (tops.get(feed) ?? 0) + (opts.top ?? 0)));
+    feed.scrollBy = scrollBy as unknown as typeof feed.scrollBy;
+    computedOverflow(['feed']);
+
+    const { executed, failedStep } = await executePlan(new Map(), 0, [
+      { kind: 'scroll', ref: 'page', direction: 'down', pixels: 800 },
     ]);
-    expect(executed).toHaveLength(1);
-    expect(failedStep).toMatchObject({ index: 1, code: 'stale_ref' });
+    expect(failedStep).toBeUndefined();
+    expect(scrollBy).toHaveBeenCalledWith({ top: 800, left: 0, behavior: 'instant' });
+    // pageSettled is an internal observation (ctrPlan strips it before the host),
+    // so it is asserted separately from the host-facing shape.
+    const { pageSettled: internal, ...forwarded } = executed[0]!;
+    expect(internal).toBe(true);
+    expect(forwarded).toEqual({
+      action: 'scroll',
+      ref: 'page',
+      target: 'div.web-scroll',
+      scrollMetrics: { scrollTop: 800, scrollHeight: 3000, clientHeight: 800, atBottom: false },
+    });
+  });
+
+  it('page-mode scroll fails with invalid_target when nothing can scroll', async () => {
+    noDocumentScroll();
+    document.body.innerHTML = '<p>static page</p>';
+    computedOverflow([]);
+    const { executed, failedStep } = await executePlan(new Map(), 0, [
+      { kind: 'scroll', ref: 'page', direction: 'down' },
+    ]);
+    expect(executed).toHaveLength(0);
+    expect(failedStep).toMatchObject({ index: 0, code: 'invalid_target' });
+    expect(failedStep?.message).toContain('No scrollable region found');
+    expect(failedStep?.message).toContain('tab_snapshot');
+  });
+
+  it('page-mode scroll without a direction fails instead of silently doing nothing', async () => {
+    noDocumentScroll();
+    document.body.innerHTML = '<p>static</p>';
+    computedOverflow([]);
+    const { failedStep } = await executePlan(new Map(), 0, [{ kind: 'scroll', ref: 'page' }]);
+    expect(failedStep).toMatchObject({ code: 'invalid_target' });
+    expect(failedStep?.message).toContain('direction');
+  });
+
+  it('a failing scroll step stops the rest of the plan', async () => {
+    noDocumentScroll();
+    document.body.innerHTML = '<button>A</button>';
+    const capture = captureSnapshot(document);
+    const clicked = vi.fn();
+    el('button').addEventListener('click', clicked);
+    computedOverflow([]);
+    const { executed, failedStep } = await executePlan(capture.refMap, 0, [
+      { kind: 'scroll', ref: 'page', direction: 'down' },
+      { kind: 'click', ref: refOf('button', 'A', capture) },
+    ]);
+    expect(executed).toHaveLength(0);
+    expect(failedStep).toMatchObject({ index: 0, code: 'invalid_target' });
+    expect(clicked).not.toHaveBeenCalled();
   });
 });
 

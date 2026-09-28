@@ -45,6 +45,12 @@ if (!window.__ctrContentInjected) {
   }
 
 
+/** Page-mode scroll step: a static target, no snapshot ref involved. */
+function isStaticTargetScroll(step: unknown): boolean {
+  const s = step as { kind?: unknown; ref?: unknown } | null;
+  return s?.kind === 'scroll' && s.ref === 'page';
+}
+
   chrome.runtime.onMessage.addListener(
     (msg: unknown, _sender, sendResponse: (response: unknown) => void) => {
       const m = (msg ?? {}) as { type?: string; ref?: unknown; filter?: unknown; action?: unknown };
@@ -125,7 +131,9 @@ if (!window.__ctrContentInjected) {
           sendResponse({ ok: false, error: { code: 'invalid_target', message: 'Malformed plan request.' } });
           return false;
         }
-        if (!lastRefMap) {
+        if (!lastRefMap && !steps.every(isStaticTargetScroll)) {
+          // Page-mode scroll addresses no element, so it is legitimate without a
+          // prior snapshot; every other step needs the latest refMap.
           sendResponse({
             ok: false,
             error: { code: 'unknown_ref', message: 'No snapshot captured yet — call tab_snapshot first.' },
@@ -135,7 +143,12 @@ if (!window.__ctrContentInjected) {
         const map = lastRefMap;
         void (async () => {
           try {
-            const { executed, failedStep } = executePlan(map, refBase, steps as PlanStep[]);
+            const { executed, failedStep, pageSettled } = await executePlan(
+              map ?? new Map(),
+              refBase,
+              steps as PlanStep[],
+              document,
+            );
             if (executed.length === 0 && failedStep) {
               // Nothing happened: report a plain error (single-action ergonomics).
               sendResponse({ ok: false, error: { code: failedStep.code, message: failedStep.message } });
@@ -143,11 +156,15 @@ if (!window.__ctrContentInjected) {
             }
             // Wait for the DOM to go quiet (honestly capped). This is a dispatch
             // receipt, not an observation: callers take tab_snapshot to inspect it.
-            const settled = await waitForQuiet(document);
+            // A page-mode scroll already settled and MEASURED after the wait, so its
+            // observation is the honest one and wins over a pre-scroll settle.
+            const settled = pageSettled ?? (await waitForQuiet(document));
             sendResponse({
               ok: true,
               result: {
-                executed,
+                // pageSettled is an internal observation and must not leak into the
+                // host-facing result (PlanResultSchema is strict).
+                executed: executed.map(({ pageSettled: _drop, ...rest }) => rest),
                 failedStep,
                 pageState: settled ? 'settled' : 'still-changing',
               },

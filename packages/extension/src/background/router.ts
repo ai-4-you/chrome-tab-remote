@@ -8,7 +8,7 @@
 //      act tools: mode check -> describe target -> USER APPROVAL -> re-validate
 //      (the approval wait is long) -> execute
 import type { ErrorCode, Grant, PlanStep, ToolCallRequest, ToolResult } from '@ctr/shared';
-import { isActTool, isGrantUsable, PLAN_MAX_STEPS, PlanStepSchema, ToolErrorSchema } from '@ctr/shared';
+import { isActTool, isGrantUsable, PLAN_MAX_STEPS, PlanStepSchema, SCROLL_DEFAULT_PIXELS, ToolErrorSchema } from '@ctr/shared';
 import { z } from 'zod';
 import { proposeApproval, type ApprovalStep } from './approvals.js';
 import { proposeGrantRequest } from './grant-requests.js';
@@ -296,7 +296,22 @@ async function routeToolCall(req: ToolCallRequest): Promise<RoutedResult> {
 function stepDetail(step: PlanStep): string | undefined {
   if (step.kind === 'fill') return `type ${JSON.stringify(step.text ?? '')}`;
   if (step.kind === 'select') return `choose ${JSON.stringify(step.value ?? '')}`;
+  if (step.kind === 'scroll') {
+    // Element mode has no direction/distance: it brings the element into view
+    // (block:'center'). The card says exactly that — nothing the executor ignores.
+    return step.ref === 'page'
+      ? `${step.direction} ${step.pixels ?? SCROLL_DEFAULT_PIXELS}px (page scroller or inner feed container)`
+      : 'scroll into view (centre of the viewport)';
+  }
   return undefined;
+}
+
+/**
+ * Page-mode scroll targets a static description, not a snapshot ref: nothing exists
+ * to ctrDescribe, so the approval card shows this human string instead.
+ */
+function pageScrollTarget(step: PlanStep): string {
+  return `page ${step.direction} ${step.pixels ?? SCROLL_DEFAULT_PIXELS}px`;
 }
 
 /**
@@ -318,10 +333,64 @@ async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolRes
       return errResult(
         req.id,
         'invalid_target',
-        `Invalid steps (1–${PLAN_MAX_STEPS} of {kind: click|fill|select, ref, text?, value?}): ${parsed.error.issues[0]?.message ?? 'schema mismatch'}`,
+        `Invalid steps (1–${PLAN_MAX_STEPS} of {kind: click|fill|select|scroll, ref, text?, value?, direction?+pixels?/behavior? for page scroll}): ${parsed.error.issues[0]?.message ?? 'schema mismatch'}`,
       );
     }
     steps = parsed.data;
+  } else if (req.tool === 'tab_scroll') {
+    const ref = req.params['ref'];
+    const direction = req.params['direction'];
+    const rawPixels = req.params['pixels'];
+    const behavior = req.params['behavior'];
+    const badPixels =
+      rawPixels !== undefined &&
+      !(Number.isInteger(rawPixels) && (rawPixels as number) >= 1 && (rawPixels as number) <= 10_000);
+    if (badPixels) {
+      return errResult(req.id, 'invalid_target', 'pixels must be an integer between 1 and 10000.');
+    }
+    const pixels = rawPixels as number | undefined;
+    if (behavior !== undefined && behavior !== 'instant' && behavior !== 'auto') {
+      return errResult(req.id, 'invalid_target', "behavior must be 'instant' or 'auto'.");
+    }
+    if (ref === 'page' || ref === undefined) {
+      // Page mode: direction is required (same rule as the shared schema).
+      if (direction !== 'down' && direction !== 'up') {
+        return errResult(
+          req.id,
+          'invalid_target',
+          "Page-mode scroll requires direction: 'down' | 'up'. Pass an element ref from tab_snapshot to scroll one element into view.",
+        );
+      }
+      steps = [{ kind: 'scroll', ref: 'page', direction, pixels, behavior }];
+    } else {
+      if (typeof ref !== 'string' || !/^n\d+$/.test(ref)) {
+        return errResult(req.id, 'unknown_ref', 'ref must be a node ref (e.g. "n42") or "page".');
+      }
+      // Element mode brings the element into view; distance and direction would be
+      // silently ignored, so they are refused rather than accepted-and-dropped.
+      if (pixels !== undefined) {
+        return errResult(
+          req.id,
+          'invalid_target',
+          'pixels applies to page mode only; an element ref scrolls into view. Omit pixels (and direction) for element mode.',
+        );
+      }
+      if (direction !== undefined) {
+        return errResult(
+          req.id,
+          'invalid_target',
+          "direction applies to page mode only; an element ref scrolls into view. Omit direction for element mode, or pass direction with ref 'page' to scroll the page.",
+        );
+      }
+      if (behavior !== undefined) {
+        return errResult(
+          req.id,
+          'invalid_target',
+          "behavior applies to page mode only; an element ref scrolls into view instantly. Omit behavior for element mode.",
+        );
+      }
+      steps = [{ kind: 'scroll', ref } as PlanStep];
+    }
   } else {
     const ref = req.params['ref'];
     if (typeof ref !== 'string' || ref.length === 0) {
@@ -356,6 +425,11 @@ async function routeActTool(req: ToolCallRequest, grant: Grant): Promise<ToolRes
   // list, and stale/unknown refs never reach the user at all.
   const approvalSteps: ApprovalStep[] = [];
   for (const step of steps) {
+    if (step.kind === 'scroll' && step.ref === 'page') {
+      // Static target: no ctrDescribe round-trip — there is no element to describe.
+      approvalSteps.push({ kind: step.kind, target: pageScrollTarget(step), detail: stepDetail(step) });
+      continue;
+    }
     let describeResp: unknown;
     try {
       describeResp = await sendToContentScript(grant.tabId, { type: 'ctrDescribe', ref: step.ref });

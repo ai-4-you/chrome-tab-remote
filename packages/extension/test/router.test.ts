@@ -497,6 +497,170 @@ describe('router', () => {
       expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
     });
 
+    // --- tab_scroll (C-2): page mode is a static target, element mode is a ref ---
+
+    const SCROLL_RECEIPT = {
+      executed: [
+        {
+          action: 'scroll',
+          ref: 'page',
+          target: 'div.feed',
+          scrollMetrics: { scrollTop: 800, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+        },
+      ],
+      pageState: 'settled',
+    };
+
+    it('tab_scroll page mode: no ctrDescribe, one approval, static target on the card', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage.mockResolvedValueOnce({ ok: true, result: SCROLL_RECEIPT });
+
+      const promise = handleToolCall(call('tab_scroll', { direction: 'down', pixels: 800 }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      const pending = getPendingApproval()!;
+      expect(pending.steps).toEqual([
+        {
+          kind: 'scroll',
+          target: 'page down 800px',
+          detail: 'down 800px (page scroller or inner feed container)',
+        },
+      ]);
+      decideApproval(pending.opId, true);
+
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      // The static target means exactly ONE tab message: the plan itself.
+      expect(mock.tabs.sendMessage).toHaveBeenCalledTimes(1);
+      expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, {
+        type: 'ctrPlan',
+        steps: [{ kind: 'scroll', ref: 'page', direction: 'down', pixels: 800, behavior: undefined }],
+      });
+    });
+
+    it('tab_scroll page mode defaults the distance and accepts ref "page" equivalently', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage.mockResolvedValueOnce({ ok: true, result: SCROLL_RECEIPT });
+      const promise = handleToolCall(call('tab_scroll', { ref: 'page', direction: 'up' }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      expect(getPendingApproval()!.steps[0]!.target).toBe('page up 800px');
+      decideApproval(getPendingApproval()!.opId, true);
+      expect((await promise).ok).toBe(true);
+    });
+
+    it('tab_scroll page mode without direction fails before any tab contact', async () => {
+      await mintActGrant();
+      expectError(await handleToolCall(call('tab_scroll', {})), 'invalid_target');
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+      expect(getPendingApproval()).toBeNull();
+    });
+
+    it('tab_scroll rejects a bad pixels range and behavior before any tab contact', async () => {
+      await mintActGrant();
+      expectError(await handleToolCall(call('tab_scroll', { direction: 'down', pixels: 0 })), 'invalid_target');
+      expectError(
+        await handleToolCall(call('tab_scroll', { direction: 'down', pixels: 10001 })),
+        'invalid_target',
+      );
+      expectError(
+        await handleToolCall(call('tab_scroll', { direction: 'down', behavior: 'smooth' })),
+        'invalid_target',
+      );
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('tab_scroll on an observe-only grant yields observe_only before any tab contact', async () => {
+      await mintGrant(1, ORIGIN);
+      mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/` });
+      expectError(await handleToolCall(call('tab_scroll', { direction: 'down' })), 'observe_only');
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('tab_scroll element mode describes the ref and fails stale BEFORE approval', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'stale_ref', message: 'Ref n42 is from an older snapshot.' },
+      });
+      expectError(await handleToolCall(call('tab_scroll', { ref: 'n42' })), 'stale_ref');
+      expect(getPendingApproval()).toBeNull();
+      expect(mock.tabs.sendMessage).toHaveBeenCalledTimes(1);
+      expect(mock.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'ctrDescribe', ref: 'n42' });
+    });
+
+    it('tab_scroll element mode: approved plan carries ref only, with the described target', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage
+        .mockResolvedValueOnce({ ok: true, result: { target: 'article "Post"' } }) // ctrDescribe
+        .mockResolvedValueOnce({
+          ok: true,
+          result: {
+            executed: [
+              {
+                action: 'scroll',
+                ref: 'n42',
+                target: 'article "Post"',
+                scrollMetrics: { scrollTop: 4100, scrollHeight: 5000, clientHeight: 900, atBottom: true },
+              },
+            ],
+            pageState: 'settled',
+          },
+        });
+      const promise = handleToolCall(call('tab_scroll', { ref: 'n42' }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      // The card describes what actually happens: scrollIntoView, not a distance.
+      expect(getPendingApproval()!.steps).toEqual([
+        { kind: 'scroll', target: 'article "Post"', detail: 'scroll into view (centre of the viewport)' },
+      ]);
+      decideApproval(getPendingApproval()!.opId, true);
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      expect(mock.tabs.sendMessage).toHaveBeenLastCalledWith(1, {
+        type: 'ctrPlan',
+        steps: [{ kind: 'scroll', ref: 'n42' }],
+      });
+    });
+
+    it('tab_scroll rejects pixels and direction in element mode instead of ignoring them', async () => {
+      // F-A2: a parameter that is accepted, shown, and then dropped is a contract
+      // failure — the agent would believe it asked for a bounded move.
+      await mintActGrant();
+      mock.tabs.sendMessage = vi.fn(async () => ({ ok: true, result: {} }));
+      expectError(await handleToolCall(call('tab_scroll', { ref: 'n42', pixels: 300 })), 'invalid_target');
+      expectError(await handleToolCall(call('tab_scroll', { ref: 'n42', direction: 'up' })), 'invalid_target');
+      expectError(await handleToolCall(call('tab_scroll', { ref: 'n42', behavior: 'auto' })), 'invalid_target');
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('tab_scroll rejects a malformed ref before any tab contact', async () => {
+      await mintActGrant();
+      expectError(await handleToolCall(call('tab_scroll', { ref: '#feed' })), 'unknown_ref');
+      expect(mock.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('tab_plan accepts a page-scroll step alongside a click and rejects page mode without direction', async () => {
+      await mintActGrant();
+      mock.tabs.sendMessage
+        .mockResolvedValueOnce({ ok: true, result: { target: 'button "Save"' } }) // describe click step
+        .mockResolvedValueOnce({ ok: true, result: { executed: [], pageState: 'settled' } });
+      const steps = [
+        { kind: 'scroll', ref: 'page', direction: 'down' },
+        { kind: 'click', ref: 'n7' },
+      ];
+      const promise = handleToolCall(call('tab_plan', { steps }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      expect(getPendingApproval()!.steps).toEqual([
+        { kind: 'scroll', target: 'page down 800px', detail: 'down 800px (page scroller or inner feed container)' },
+        { kind: 'click', target: 'button "Save"', detail: undefined },
+      ]);
+      decideApproval(getPendingApproval()!.opId, true);
+      expect((await promise).ok).toBe(true);
+
+      expectError(
+        await handleToolCall(call('tab_plan', { steps: [{ kind: 'scroll', ref: 'page' }] })),
+        'invalid_target',
+      );
+    });
+
     it('reports busy (dedicated code) while another approval is pending', async () => {
       await mintActGrant();
       mock.tabs.sendMessage.mockResolvedValue({ ok: true, result: { target: 'button "Save"' } });

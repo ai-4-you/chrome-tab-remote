@@ -174,6 +174,65 @@ describe('renderActionLine / renderPlanResult', () => {
     expect(text).toContain('Call tab_snapshot once it settles');
   });
 
+  it('renders a scroll line with the metrics that matter (atBottom is the signal)', () => {
+    expect(
+      renderActionLine({
+        action: 'scroll',
+        ref: 'page',
+        target: 'div.feed',
+        scrollMetrics: { scrollTop: 800, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+      }),
+    ).toBe(
+      'Scrolled div.feed to scrollTop 800 of scrollHeight 5000 (viewport 900px, 3300px remaining, atBottom: no) (page)',
+    );
+    expect(
+      renderActionLine({
+        action: 'scroll',
+        ref: 'n42',
+        target: 'article "Post"',
+        scrollMetrics: { scrollTop: 4100, scrollHeight: 5000, clientHeight: 900, atBottom: true },
+      }),
+    ).toContain('atBottom: yes');
+  });
+
+  it('flags a bottom reached mid-scroll as a possible lazy-load boundary', () => {
+    // The agent decides whether the feed ended from this line, so a bottom reached by
+    // an actual scroll must not read as a confirmed end of content.
+    const line = renderActionLine({
+      action: 'scroll',
+      ref: 'page',
+      target: 'div.feed',
+      scrollMetrics: { scrollTop: 4100, scrollHeight: 5000, clientHeight: 900, atBottom: true },
+    });
+    expect(line).toContain('atBottom: yes');
+    expect(line).toContain('lazy content may still load');
+  });
+
+  it('does not flag a page that never moved as a lazy boundary', () => {
+    const line = renderActionLine({
+      action: 'scroll',
+      ref: 'page',
+      target: 'the page',
+      scrollMetrics: { scrollTop: 0, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+    });
+    expect(line).not.toContain('lazy content may still load');
+    // A page already at the bottom without moving (scrollTop 0) is also unflagged.
+    const atRest = renderActionLine({
+      action: 'scroll',
+      ref: 'page',
+      target: 'the page',
+      scrollMetrics: { scrollTop: 0, scrollHeight: 900, clientHeight: 900, atBottom: true },
+    });
+    expect(atRest).toContain('atBottom: yes');
+    expect(atRest).not.toContain('lazy content may still load');
+  });
+
+  it('renders a scroll line without metrics rather than fabricating them', () => {
+    expect(renderActionLine({ action: 'scroll', ref: 'page', target: 'the page' })).toBe(
+      'Scrolled the page (page)',
+    );
+  });
+
   it('reports interruption with unknown completed-step count', () => {
     const text = renderPlanResult({ executed: [], pageState: 'interrupted' });
     expect(text).toContain('INTERRUPTED');

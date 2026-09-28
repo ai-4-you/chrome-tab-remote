@@ -10,6 +10,7 @@ import {
   FindResultSchema,
   GrantListResultSchema,
   PLAN_MAX_STEPS,
+  SCROLL_DEFAULT_PIXELS,
   PlanResultSchema,
   PlanStepSchema,
   renderFindResult,
@@ -152,7 +153,16 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
     },
     tabAction: async (
       tool: ActToolName,
-      args: { grantId?: string; ref?: string; text?: string; value?: string; steps?: PlanStep[] },
+      args: {
+        grantId?: string;
+        ref?: string;
+        text?: string;
+        value?: string;
+        steps?: PlanStep[];
+        direction?: 'down' | 'up';
+        pixels?: number;
+        behavior?: 'instant' | 'auto';
+      },
     ): Promise<CallToolResult> => {
       try {
         const extra: Record<string, unknown> = {};
@@ -160,6 +170,9 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
         if (args.text !== undefined) extra['text'] = args.text;
         if (args.value !== undefined) extra['value'] = args.value;
         if (args.steps !== undefined) extra['steps'] = args.steps;
+        if (args.direction !== undefined) extra['direction'] = args.direction;
+        if (args.pixels !== undefined) extra['pixels'] = args.pixels;
+        if (args.behavior !== undefined) extra['behavior'] = args.behavior;
         // Long per-call timeout: the user-approval wait happens inside this call.
         const raw = await bridge.callTool(tool, grantParams(args.grantId, extra), ACT_TOOL_TIMEOUT_MS);
         const parsed = PlanResultSchema.safeParse(raw);
@@ -365,15 +378,68 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
   );
 
   server.registerTool(
+    'tab_scroll',
+    {
+      description:
+        'Scroll the granted tab. Exactly one of two modes per call. PAGE mode (ref omitted ' +
+        'or the literal "page", direction required) scrolls the larger scroller: the inner ' +
+        'feed container when it overflows at least as much as the document, otherwise the ' +
+        'document itself - use it to page an infinite feed. ELEMENT mode (a ref from the ' +
+        'LATEST tab_snapshot) scrolls that element into view instantly and takes NO direction, ' +
+        'pixels or behavior (all refused: there is no distance to choose and no settle to ' +
+        'wait for). Page mode needs no prior ' +
+        'snapshot. The receipt names the scroller that actually moved and gives ' +
+        'scrollTop/scrollHeight/clientHeight/atBottom, measured after the page settled so a ' +
+        'lazy loader cannot fake "end of feed". atBottom yes means stop only if the receipt ' +
+        'also says the page settled; if it warns the page is still changing, scroll once more ' +
+        'and re-check before concluding the feed ended. If nothing on the page can scroll you ' +
+        'get invalid_target: do not retry page mode - take a snapshot and use an element ref ' +
+        'instead. ' +
+        ACT_COMMON,
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        ref: z
+          .string()
+          .regex(/^n\d+$|^page$/)
+          .optional()
+          .describe(
+            'Element mode: a node ref from the LATEST tab_snapshot (e.g. "n42"). ' +
+              'Page mode: omit it, or pass the literal "page".',
+          ),
+        direction: z
+          .enum(['down', 'up'])
+          .optional()
+          .describe('Page mode: which way to scroll. Required when ref is "page" or omitted.'),
+        pixels: z
+          .number()
+          .int()
+          .min(1)
+          .max(10000)
+          .optional()
+          .describe('Page mode: distance per call, 1-10000 (default ' + SCROLL_DEFAULT_PIXELS + ').'),
+        behavior: z
+          .enum(['instant', 'auto'])
+          .optional()
+          .describe(
+            "Page mode only (element mode refuses it): default 'instant'. 'auto' (smooth) can make the receipt report still-changing.",
+          ),
+      },
+    },
+    ({ grantId, ref, direction, pixels, behavior }) =>
+      handlers.tabAction('tab_scroll', { grantId, ref, direction, pixels, behavior }),
+  );
+
+  server.registerTool(
     'tab_plan',
     {
       description:
-        'Execute a SHORT plan of actions (click/fill/select) as ONE user approval: the user ' +
+        'Execute a SHORT plan of actions (click/fill/select/scroll) as ONE user approval: the user ' +
         'sees the full numbered step list and approves it as a whole; execution then runs in ' +
         'order and STOPS at the first failure (honest partial report). Prefer this over many ' +
         'single-action calls for form-fill flows — one interruption instead of N. Steps are ' +
         'frozen at approval: you cannot deviate. All refs must come from the LATEST snapshot; ' +
-        'a step whose element was changed by an earlier step fails with stale_ref. ' +
+        'a step whose element was changed by an earlier step fails with stale_ref. Scroll steps ' +
+        'may use ref "page" (with direction) and need no prior snapshot. ' +
         `${ACT_COMMON}`,
       inputSchema: {
         grantId: GRANT_ID_INPUT,
@@ -382,7 +448,7 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
           .min(1)
           .max(PLAN_MAX_STEPS)
           .describe(
-            `1–${PLAN_MAX_STEPS} steps: {kind: "click"|"fill"|"select", ref, text? (fill), value? (select)}.`,
+            `1–${PLAN_MAX_STEPS} steps: {kind: "click"|"fill"|"select"|"scroll", ref, text? (fill), value? (select), direction + pixels? + behavior? (scroll; ref may be "page")}.`,
           ),
       },
     },

@@ -3,11 +3,16 @@ import {
   AuditEntrySchema,
   AuditEventSchema,
   ERROR_CODES,
+  ACT_TOOL_NAMES,
+  isActTool,
   ErrorCodeSchema,
   GrantsChangedSchema,
   HostInfoSchema,
   NativeMessageSchema,
   TOOL_NAMES,
+  PlanStepSchema,
+  ActionResultSchema,
+  SCROLL_DEFAULT_PIXELS,
   ToolCallRequestSchema,
   ToolResultSchema,
   type Grant,
@@ -25,7 +30,7 @@ const grant: Grant = {
 };
 
 describe('TOOL_NAMES / ERROR_CODES', () => {
-  it('exposes exactly the Stage 1 + Stage 2 tools', () => {
+  it('exposes exactly the Stage 1 + Stage 2 + scroll tools', () => {
     expect(TOOL_NAMES).toEqual([
       'tab_snapshot',
       'tab_read',
@@ -37,8 +42,15 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'tab_click',
       'tab_fill',
       'tab_select',
+      'tab_scroll',
       'tab_plan',
     ]);
+  });
+
+  it('classifies tab_scroll as an act tool (grant mode + approval gate)', () => {
+    expect(ACT_TOOL_NAMES).toContain('tab_scroll');
+    expect(isActTool('tab_scroll')).toBe(true);
+    expect(isActTool('tab_snapshot')).toBe(false);
   });
 
   it('exposes the agreed error codes', () => {
@@ -65,6 +77,121 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
 
   it('rejects unknown error codes', () => {
     expect(ErrorCodeSchema.safeParse('nope').success).toBe(false);
+  });
+});
+
+describe('PlanStepSchema / ActionResultSchema — scroll', () => {
+  it('lists tab_scroll among the tools', () => {
+    expect(TOOL_NAMES).toContain('tab_scroll');
+  });
+
+  it('accepts a page-mode scroll step with direction', () => {
+    expect(
+      PlanStepSchema.safeParse({ kind: 'scroll', ref: 'page', direction: 'down', pixels: 600 }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a page-mode scroll step without direction (superRefine)', () => {
+    const parsed = PlanStepSchema.safeParse({ kind: 'scroll', ref: 'page' });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues[0]).toMatchObject({ path: ['direction'] });
+  });
+
+  it('accepts an element-mode scroll step with no direction', () => {
+    expect(PlanStepSchema.safeParse({ kind: 'scroll', ref: 'n42' }).success).toBe(true);
+  });
+
+  it('rejects behavior on an element-mode scroll step (no settle to animate into)', () => {
+    const b = PlanStepSchema.safeParse({ kind: 'scroll', ref: 'n42', behavior: 'auto' });
+    expect(b.success).toBe(false);
+    if (b.success) return;
+    expect(b.error.issues[0]?.path).toEqual(['behavior']);
+  });
+
+  it('rejects direction and pixels on an element-mode scroll step (they would be ignored)', () => {
+    // Element mode scrolls into view: a step carrying a distance would let the agent
+    // believe it asked for a bounded move.
+    const d = PlanStepSchema.safeParse({ kind: 'scroll', ref: 'n42', direction: 'down' });
+    expect(d.success).toBe(false);
+    if (d.success) return;
+    expect(d.error.issues[0]?.path).toEqual(['direction']);
+
+    const p = PlanStepSchema.safeParse({ kind: 'scroll', ref: 'n42', pixels: 300 });
+    expect(p.success).toBe(false);
+    if (p.success) return;
+    expect(p.error.issues[0]?.path).toEqual(['pixels']);
+  });
+
+  it('rejects a non-instant/auto behavior on a scroll step', () => {
+    expect(PlanStepSchema.safeParse({ kind: 'scroll', ref: 'page', direction: 'down', behavior: 'smooth' }).success).toBe(false);
+  });
+
+  it('keeps pageSettled an optional internal field on an action result', () => {
+    expect(
+      ActionResultSchema.safeParse({
+        action: 'scroll',
+        ref: 'page',
+        target: 'the page',
+        scrollMetrics: { scrollTop: 800, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+        pageSettled: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      ActionResultSchema.safeParse({
+        action: 'scroll',
+        ref: 'page',
+        target: 'the page',
+        pageSettled: 'yes',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects out-of-range pixels and unknown behavior', () => {
+    expect(
+      PlanStepSchema.safeParse({ kind: 'scroll', ref: 'page', direction: 'up', pixels: 0 }).success,
+    ).toBe(false);
+    expect(
+      PlanStepSchema.safeParse({ kind: 'scroll', ref: 'page', direction: 'up', pixels: 20000 }).success,
+    ).toBe(false);
+    expect(
+      PlanStepSchema.safeParse({
+        kind: 'scroll',
+        ref: 'page',
+        direction: 'up',
+        behavior: 'smooth',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('still rejects a non-ref, non-page ref for other kinds', () => {
+    expect(PlanStepSchema.safeParse({ kind: 'click', ref: 'page' }).success).toBe(true); // schema-level;
+    // enforcement for 'page' on click/fill/select happens pre-approval in the
+    // content script (ctrDescribe answers unknown_ref), before any approval card.
+    expect(PlanStepSchema.safeParse({ kind: 'click', ref: '#btn' }).success).toBe(false);
+  });
+
+  it('accepts a scroll action result with metrics and rejects a bad metric', () => {
+    expect(
+      ActionResultSchema.safeParse({
+        action: 'scroll',
+        ref: 'page',
+        target: 'div.feed',
+        scrollMetrics: { scrollTop: 800, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      ActionResultSchema.safeParse({
+        action: 'scroll',
+        ref: 'page',
+        target: 'the page',
+        scrollMetrics: { scrollTop: -1, scrollHeight: 5000, clientHeight: 900, atBottom: false },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('documents the default page-mode distance', () => {
+    expect(SCROLL_DEFAULT_PIXELS).toBe(800);
   });
 });
 

@@ -15,31 +15,93 @@ export const TOOL_NAMES = [
   'tab_click',
   'tab_fill',
   'tab_select',
+  'tab_scroll',
   'tab_plan',
 ] as const;
 export const ToolNameSchema = z.enum(TOOL_NAMES);
 export type ToolName = z.infer<typeof ToolNameSchema>;
 
 /** The mutating tools; every one requires an 'act' grant AND user approval (per plan). */
-export const ACT_TOOL_NAMES = ['tab_click', 'tab_fill', 'tab_select', 'tab_plan'] as const;
+export const ACT_TOOL_NAMES = ['tab_click', 'tab_fill', 'tab_select', 'tab_scroll', 'tab_plan'] as const;
 export type ActToolName = (typeof ACT_TOOL_NAMES)[number];
 export function isActTool(tool: ToolName): tool is ActToolName {
   return (ACT_TOOL_NAMES as readonly string[]).includes(tool);
 }
 
+/** Target of a step or result: a snapshot ref, or the literal 'page' (page-mode scroll). */
+const REF_OR_PAGE = /^n\d+$|^page$/;
+
 /**
  * One step of an action plan. Single-action tools are 1-step plans internally —
  * one gate, one approval card, one result shape (C-10).
+ *
+ * A deliberately FLAT object (not a discriminated union): a union would churn every
+ * consumer (host re-validation, the router's z.array(PlanStepSchema), tests) for no
+ * validation gain. Per-kind rules are enforced by the superRefine below; 'page' is a
+ * legal ref value ONLY for a scroll step, because the host's tab_click/tab_fill/
+ * tab_select input schemas accept only /^n\d+$/ and the content script's ref lookup
+ * answers unknown_ref for anything that is not in the latest snapshot.
  */
-export const PlanStepSchema = z.object({
-  kind: z.enum(['click', 'fill', 'select']),
-  ref: z.string().regex(/^n\d+$/),
-  /** fill only. */
-  text: z.string().optional(),
-  /** select only. */
-  value: z.string().optional(),
-});
+export const PlanStepSchema = z
+  .object({
+    kind: z.enum(['click', 'fill', 'select', 'scroll']),
+    /** Snapshot ref, or 'page' for a page-mode scroll. */
+    ref: z.string().regex(REF_OR_PAGE),
+    /** fill only. */
+    text: z.string().optional(),
+    /** select only. */
+    value: z.string().optional(),
+    /** scroll only. Required when ref === 'page' (see superRefine). */
+    direction: z.enum(['down', 'up']).optional(),
+    /** scroll only: page mode; defaults to SCROLL_DEFAULT_PIXELS. */
+    pixels: z.number().int().min(1).max(10_000).optional(),
+    /** scroll only, PAGE mode only; 'instant' is the default — smooth scroll breaks settle detection. */
+    behavior: z.enum(['instant', 'auto']).optional(),
+  })
+  .superRefine((step, ctx) => {
+    if (step.kind !== 'scroll') return;
+    if (step.ref === 'page') {
+      if (step.direction !== 'down' && step.direction !== 'up') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['direction'],
+          message: "Page-mode scroll requires direction: 'down' | 'up'.",
+        });
+      }
+      return;
+    }
+    // Element mode brings the element into view; it has no direction and no
+    // distance. Accepting them only to ignore them would let an agent believe it
+    // asked for a bounded move, so the contract refuses them outright.
+    if (step.direction !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['direction'],
+        message: "direction applies to page mode only; an element ref scrolls into view.",
+      });
+    }
+    if (step.pixels !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pixels'],
+        message: "pixels applies to page mode only; an element ref scrolls into view.",
+      });
+    }
+    // Element mode scrolls into view instantly and has no settle wait, so its
+    // metrics are read right after dispatch: 'auto' would only ever describe a
+    // pre-animation layout. Same accepted-but-ignored trap as direction/pixels.
+    if (step.behavior !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['behavior'],
+        message: 'behavior applies to page mode only; an element ref scrolls into view instantly.',
+      });
+    }
+  });
 export type PlanStep = z.infer<typeof PlanStepSchema>;
+
+/** Default page-mode scroll distance when the caller omits pixels. */
+export const SCROLL_DEFAULT_PIXELS = 800;
 export const PLAN_MAX_STEPS = 10;
 
 /** DOM-settle heuristic: "quiet" = no mutations for SETTLE_QUIET_MS, capped at SETTLE_MAX_MS. */
@@ -64,16 +126,33 @@ export const APPROVAL_TIMEOUT_MS = 110_000;
 export const ACT_TOOL_TIMEOUT_MS = 120_000;
 
 /** Result of one executed step. */
+export const ScrollMetricsSchema = z.object({
+  scrollTop: z.number().int().nonnegative(),
+  scrollHeight: z.number().int().nonnegative(),
+  clientHeight: z.number().int().nonnegative(),
+  atBottom: z.boolean(),
+});
+export type ScrollMetrics = z.infer<typeof ScrollMetricsSchema>;
+
 export const ActionResultSchema = z.object({
-  action: z.enum(['click', 'fill', 'select']),
-  ref: z.string().regex(/^n\d+$/),
+  action: z.enum(['click', 'fill', 'select', 'scroll']),
+  ref: z.string().regex(REF_OR_PAGE),
   /** Short human description of the element acted on, e.g. 'button "Save"'. */
   target: z.string(),
   /** fill only: the text that was written. */
   text: z.string().optional(),
   /** select only: the option that ended up selected. */
   value: z.string().optional(),
+  /** scroll only: measured on the element that actually scrolled. */
+  scrollMetrics: ScrollMetricsSchema.optional(),
+  /**
+   * page-mode scroll only: settle state observed AFTER the scroll settled, so
+   * lazy-loaded growth is included. Internal to the extension — ctrPlan uses it as
+   * the authoritative pageState and strips it before the result leaves the tab.
+   */
+  pageSettled: z.boolean().optional(),
 });
+
 export type ActionResult = z.infer<typeof ActionResultSchema>;
 
 /**
