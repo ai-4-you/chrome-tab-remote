@@ -3,7 +3,7 @@
 **Status:** REVIEWED v3.1 (2026-09-28). v2 findings (Greta peer + Rourke red team) applied;
 v3 cross-origin pivot (user decision 2026-09-28) + §2.7 origin-transition consent rule;
 v3.1 folds in Vera's red team on the delta (§9). **§2.7 APPROVED by user 2026-09-28**
-(amends G-3 for ALL cross-origin transitions). **READY FOR PHASE 2.**
+(amends G-3 for ALL cross-origin transitions). **READY FOR PHASE 2** (Phases 1–3 DONE 2026-09-28; see §8/§9).
 **Supersedes:** the `navigate deferred to a later slice` note in C-2.
 
 ## 1. Goal and scope
@@ -152,6 +152,10 @@ In-flight serialize (decision 6) → `busy`.
 { requestedUrl, finalUrl, loadState: 'complete' | 'timeout' | 'conflict',
   grantStatus: 'active' | 'suspended' }
 ```
+**Receipt contract (recorded live, 2026-09-28, F-live-1):** `finalUrl` is the URL
+**at load-complete**; client-side (SPA) routing after load is not reflected — take a
+fresh snapshot (which the Next step already instructs). Known, documented limitation;
+no code change.
 MCP prose (X-2) examples:
 - same-origin: `Navigated https://a/p → https://a/p2 (loaded). Snapshot refs are
   invalid — take a fresh tab_snapshot.`
@@ -281,6 +285,25 @@ MCP prose (X-2) examples:
     cross-origin transitions always pause + suspend + require informed re-confirm with
     capability reset.
 
+### Live results (2026-09-28, Brave; cross-checked by Mira, w4D:pA)
+- **PASSED:** §7.1 (same-origin); §7.2 (cross-origin card → suspend → re-confirm,
+  incl. Freaky no-bypass, verified twice); §7.3 (per-site prompt denied → grant stays
+  suspended on old origin, clean `grant_suspended`, no data); §7.6 **RESOLVED**
+  (viewport capture survives same-origin navigation; O-10 closed); §7.7 (Freaky
+  same-origin, no card); §7.9 post-navigate suspended card (toggle OFF + disabled,
+  danger-styled reset line, AGENT ACTIVITY live).
+  Additionally verified: §2.7 origin-transition reset (forced, not just displayed),
+  act on a re-pinned origin, Replace mints a fresh strict grant (Vera F3), unwatched
+  card auto-denied at exactly 110 s (fail-closed, grant untouched).
+- **§7.9 SPLIT:** post-navigate suspended-card half PASSED; manual cross-origin
+  link-click half NOT run.
+- **DEFERRED (edge-receipt paths; do not block the commit's trustworthiness):** §7.4
+  (redirect-escape), §7.5 (chrome-error), §7.8 (IDN/punycode), timeout +
+  mid-wait-conflict (45 s slow page, user navigates mid-wait), and the §7.9
+  manual-click half.
+- **Note:** §7.2's snapshot-on-new-origin was demonstrated on the orf.at re-pin, not
+  example.com's.
+
 ## 8. Execution plan (sub-agents)
 - **Phase 1a (DONE 2026-09-28):** Greta (peer) + Rourke (red team) on the v2
   same-origin plan → findings applied (v2, §9).
@@ -292,6 +315,10 @@ MCP prose (X-2) examples:
   supervises live (diff, scope, tests, bounded follow-ups); lead (firstmate)
   independently inspects the final diff, runs the full suite, does the §7 live checks,
   and alone accepts + commits.
+- **Phase 3 (DONE 2026-09-28):** §7 live session (Brave) + cross-check by Mira
+  (w4D:pA, read-only) + docs-only record committed (REQUIREMENTS C-12/G-3, §7.6
+  resolution, live-status notes); F-live-1 documented as a limitation (no code
+  change); **F-live-2 open**.
 - Acceptance: suite green, diff inside §5's path set, requirements updated, scratch
   removed, panes closed.
 
@@ -328,5 +355,22 @@ MCP prose (X-2) examples:
   danger-styled line above the confirm button; F7 conflict+suspended receipt example
   missing → added. UNDETERMINED (Vera): panel-refresh timing for F1 — closed by the
   force-set regardless.
-- **Carried UNDETERMINED (live, §7):** activeTab persistence after SAME-ORIGIN
-  navigate (§7.6); IDN/punycode normalization (§7.8).
+- **Live session (2026-09-28, Brave; cross-checked by Mira):** §7 live verification
+  run. **PASS:** §7.1, §7.2 (incl. Freaky no-bypass), §7.3 (denied per-site prompt),
+  §7.6 (RESOLVED — capture survives same-origin navigation; O-10 closed), §7.7,
+  §7.9 post-navigate card; 110 s fail-closed timeout; act on re-pinned origin;
+  Replace mints strict grant. **§7.9 SPLIT:** manual-click half not run.
+  **DEFERRED:** §7.4, §7.5, §7.8, timeout + mid-wait conflict. **F-live-1 (accuracy,
+  LOW, NO code change):** receipt/audit report the URL at load-complete, not the
+  post-SPA URL — documented as the receipt contract (§3.5); the proposed
+  `observedUrls` fallback was REJECTED because `observedUrls` is the exact array the
+  §3.3.7 conflict rule reads — that change would have made a real user navigation
+  count as "observed" and laundered it as `loadState: complete` (i.e. it would have
+  caused F-live-2); current code is safer. **F-live-2 (NEW, open, MEDIUM):** conflict
+  attribution is ineffective against a REAL user full-document navigation during the
+  wait (its `changeInfo.url` event lands in `observedUrls`, so §3.3.7 can never fire
+  for it; receipt/audit attribute the user's nav to the call). Consent boundary stays
+  intact (off-origin user nav still suspends via the pin listener — verified live);
+  this is honesty-of-receipt, not a capability leak. Needs its own design review
+  (e.g. timestamped/monotonic load correlation) — NOT patched in this slice.
+  Carried UNDETERMINED (live, §7): IDN/punycode normalization (§7.8).
