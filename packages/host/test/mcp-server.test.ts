@@ -1,6 +1,7 @@
 import { createConnection } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type { Grant } from '@ctr/shared';
+import { NavigateResultSchema, NAVIGATE_TOOL_TIMEOUT_MS } from '@ctr/shared';
 import { ToolCallError } from '../src/bridge.js';
 import {
   createToolHandlers,
@@ -17,6 +18,7 @@ const GRANT: Grant = {
   origin: 'https://docs.example.com',
   mode: 'observe',
   allowViewportScreenshot: false,
+  allowNavigate: false,
   status: 'active',
   expiresAt: '2026-08-02T12:00:00.000Z',
   createdByGesture: true,
@@ -404,6 +406,134 @@ describe('resolveDataDir', () => {
   it('defaults to ~/.chrome-tab-remote', () => {
     expect(resolveDataDir({})).toMatch(/\/\.chrome-tab-remote$/);
   });
+  it('tab_navigate bridges to callTool with url + NAVIGATE_TOOL_TIMEOUT_MS and renders prose', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://docs.example.com/page',
+      finalUrl: 'https://docs.example.com/page2',
+      loadState: 'complete',
+      grantStatus: 'active',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ grantId: GRANT.grantId, url: 'https://docs.example.com/page' });
+    expect(callTool).toHaveBeenCalledWith(
+      'tab_navigate',
+      { grantId: GRANT.grantId, url: 'https://docs.example.com/page' },
+      NAVIGATE_TOOL_TIMEOUT_MS,
+    );
+    expect(NAVIGATE_TOOL_TIMEOUT_MS).toBe(150_000);
+    const text = textOf(result);
+    expect(text).toContain('Navigated https://docs.example.com/page → https://docs.example.com/page2 (loaded)');
+    expect(text).toContain('Snapshot refs are invalid');
+    expect(text).toContain('tab_snapshot');
+  });
+
+  it('tab_navigate cross-origin: prose states the suspension + re-confirm', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://a.example/p',
+      finalUrl: 'https://b.example/x',
+      loadState: 'complete',
+      grantStatus: 'suspended',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://a.example/p' });
+    const text = textOf(result);
+    expect(text).toContain('DIFFERENT origin');
+    expect(text).toContain('SUSPENDED');
+    expect(text).toContain('re-confirm');
+    expect(text).toContain('auto-approve and screenshots are reset');
+  });
+
+  it('tab_navigate timeout: prose says page still loading', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://docs.example.com/page',
+      finalUrl: 'https://docs.example.com/page',
+      loadState: 'timeout',
+      grantStatus: 'active',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://docs.example.com/page' });
+    const text = textOf(result);
+    expect(text).toContain('still loading after the 30 s wait');
+    expect(text).toContain('tab_unreachable');
+    expect(text).toContain('wait ~5 s');
+  });
+
+  it('tab_navigate chrome-error: prose says load failed', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://unresolvable.example/',
+      finalUrl: 'chrome-error://chromewebdata/',
+      loadState: 'complete',
+      grantStatus: 'suspended',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://unresolvable.example/' });
+    const text = textOf(result);
+    expect(text).toContain('Chrome error page');
+    expect(text).toContain('suspended');
+  });
+
+  it('tab_navigate conflict: prose says the call did not load the final URL', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://a.example/p',
+      finalUrl: 'https://user.example/other',
+      loadState: 'conflict',
+      grantStatus: 'suspended',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://a.example/p' });
+    const text = textOf(result);
+    expect(text).toContain('which this call did not load');
+    expect(text).toContain('SUSPENDED');
+  });
+
+  it('tab_navigate falls back to JSON for unexpected result shapes', async () => {
+    const callTool = vi.fn(async () => ({ unexpected: true }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://example.com/' });
+    expect(JSON.parse(textOf(result))).toEqual({ unexpected: true });
+  });
+
+  it('tab_navigate maps ToolCallError to an MCP tool error with recovery', async () => {
+    const callTool = vi.fn(async () => {
+      throw new ToolCallError('navigate_not_allowed', 'Navigation is not authorized.');
+    });
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    const result = await handlers.tabNavigate({ url: 'https://example.com/' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('navigate_not_allowed:');
+    expect(textOf(result)).toContain('Next step:');
+  });
+
+  it('tab_navigate timeout-arg assertion: 150 s, not the 120 s act-tool timeout', async () => {
+    const callTool = vi.fn(async () => ({
+      requestedUrl: 'https://docs.example.com/page',
+      finalUrl: 'https://docs.example.com/page',
+      loadState: 'complete',
+      grantStatus: 'active',
+    }));
+    const handlers = createToolHandlers(stubBridge({ callTool }));
+    await handlers.tabNavigate({ url: 'https://docs.example.com/page' });
+    expect(callTool).toHaveBeenCalledWith(
+      'tab_navigate',
+      { url: 'https://docs.example.com/page' },
+      150_000,
+    );
+  });
+
+  it('NavigateResultSchema accepts all 6 loadState × grantStatus combinations', async () => {
+    for (const loadState of ['complete', 'timeout', 'conflict'] as const) {
+      for (const grantStatus of ['active', 'suspended'] as const) {
+        expect(
+          NavigateResultSchema.safeParse({
+            requestedUrl: 'https://a.example/p',
+            finalUrl: 'https://a.example/p',
+            loadState,
+            grantStatus,
+          }).success,
+        ).toBe(true);
+      }
+    }
+  });
 });
 
 describe('MCP tool registration (tools/list over the live endpoint)', () => {
@@ -451,6 +581,23 @@ describe('MCP tool registration (tools/list over the live endpoint)', () => {
       expect(scroll!.description).toContain('atBottom');
       expect(props['ref']!.description).toContain('n42');
       expect(props['pixels']!.description).toContain('800');
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it('advertises tab_navigate with url param and the two-tier semantics in its description', async () => {
+    const handle = await startMcpHttpServer(stubBridge(), { port: 0 });
+    try {
+      const { tools } = await listTools(handle.port);
+      const nav = tools.find((t) => t.name === 'tab_navigate');
+      expect(nav, 'tab_navigate must be registered for agents to find it').toBeDefined();
+      const props = nav!.inputSchema!.properties as Record<string, { description?: string }>;
+      expect(Object.keys(props).sort()).toEqual(['grantId', 'url']);
+      expect(nav!.description).toContain('Allow Navigate');
+      expect(nav!.description).toContain('CROSS-ORIGIN');
+      expect(nav!.description).toContain('re-confirm');
+      expect(nav!.description).toContain('snapshot refs are invalid');
     } finally {
       await handle.close();
     }

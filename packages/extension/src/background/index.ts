@@ -141,6 +141,7 @@ async function grantActiveTab(
   tabId: number,
   mode: GrantMode,
   allowViewportScreenshot: boolean,
+  allowNavigate: boolean,
 ): Promise<SidePanelResult> {
   let tab: chrome.tabs.Tab;
   try {
@@ -152,7 +153,7 @@ async function grantActiveTab(
   if (!origin) {
     return { ok: false, error: 'Only http(s) pages can be granted.' };
   }
-  const grant = await mintGrant(tabId, origin, Date.now(), mode, allowViewportScreenshot);
+  const grant = await mintGrant(tabId, origin, Date.now(), mode, allowViewportScreenshot, allowNavigate);
   try {
     await injectContentScript(tabId);
   } catch (err) {
@@ -160,11 +161,18 @@ async function grantActiveTab(
     await dropOriginPermission(origin);
     return { ok: false, error: `Could not inject the content script into this tab. (${String(err)})` };
   }
+  const capBits = [
+    mode === 'act' ? 'act' : null,
+    allowViewportScreenshot ? 'viewport screenshots' : null,
+    allowNavigate ? 'allow navigate' : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   await appendAudit({
     type: 'grant_created',
     grantId: grant.grantId,
     tabId,
-    detail: `${origin} (${mode}${allowViewportScreenshot ? '; viewport screenshots' : ''})`,
+    detail: `${origin} (${capBits || 'observe'})`,
   });
   // A fresh grant answers any pending agent access request.
   grantRequestGranted();
@@ -209,13 +217,24 @@ async function reconfirmByUser(grantId: string, expectedOrigin: string): Promise
   }
   const updated = await reconfirmGrant(grantId, origin);
   // Re-pinned to a new origin: the old origin's runtime permission is obsolete.
-  if (grant.origin !== origin) await dropOriginPermission(grant.origin);
+  const originChanged = grant.origin !== origin;
+  if (originChanged) await dropOriginPermission(grant.origin);
   try {
     await injectContentScript(grant.tabId);
   } catch (err) {
     return { ok: false, error: `Could not re-inject the content script. (${String(err)})` };
   }
-  await appendAudit({ type: 'grant_reconfirmed', grantId, tabId: grant.tabId, detail: origin });
+  // Origin-transition consent rule (§2.7): the audit detail is PINNED to name
+  // the reset when the re-pin crossed an origin (Vera F2 — forensic join must
+  // not depend on timestamps), so the JSONL alone shows the capability change.
+  await appendAudit({
+    type: 'grant_reconfirmed',
+    grantId,
+    tabId: grant.tabId,
+    detail: originChanged
+      ? `${origin} (re-pinned to a different origin; reset autoApprove, allowViewportScreenshot)`
+      : origin,
+  });
   await broadcastGrants();
   return { ok: true, grant: updated };
 }
@@ -273,6 +292,8 @@ interface SidePanelMessage {
   mode?: string;
   /** ctrGrantActiveTab only: explicit viewport screenshot consent. */
   allowViewportScreenshot?: boolean;
+  /** ctrGrantActiveTab only: explicit navigate consent (act grants only). */
+  allowNavigate?: boolean;
   /** ctrReconfirm only: the origin the side panel showed the user. */
   expectedOrigin?: string;
   /** ctrApprove / ctrDeny only. */
@@ -321,6 +342,7 @@ chrome.runtime.onMessage.addListener(
           m.tabId,
           m.mode === 'act' ? 'act' : 'observe',
           m.allowViewportScreenshot === true,
+          m.allowNavigate === true,
         ).then(sendResponse);
         return true;
       case 'ctrSetAutoApprove':

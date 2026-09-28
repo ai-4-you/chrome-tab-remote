@@ -15,6 +15,7 @@ function makeGrant(overrides: Partial<Grant> = {}): Grant {
     origin: 'https://app.example.com',
     mode: 'observe',
     allowViewportScreenshot: false,
+    allowNavigate: false,
     status: 'active',
     expiresAt: new Date(NOW + DEFAULT_GRANT_TTL_MS).toISOString(),
     createdByGesture: true,
@@ -25,6 +26,18 @@ function makeGrant(overrides: Partial<Grant> = {}): Grant {
 describe('GrantSchema', () => {
   it('accepts a valid active grant', () => {
     expect(GrantSchema.parse(makeGrant())).toEqual(makeGrant());
+  });
+
+  it('defaults allowNavigate to false (explicit default-deny)', () => {
+    expect(GrantSchema.parse({ ...makeGrant(), status: 'active' }).allowNavigate).toBe(false);
+    // Legacy grants persisted before the flag existed normalize to false.
+    const legacy = makeGrant();
+    delete (legacy as Partial<typeof legacy>)['allowNavigate'];
+    expect(GrantSchema.parse(legacy).allowNavigate).toBe(false);
+  });
+
+  it('accepts allowNavigate: true', () => {
+    expect(GrantSchema.safeParse(makeGrant({ allowNavigate: true })).success).toBe(true);
   });
 
   it('accepts a suspended grant', () => {

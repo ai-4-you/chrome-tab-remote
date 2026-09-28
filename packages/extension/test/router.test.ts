@@ -732,4 +732,601 @@ describe('router', () => {
       expect(res.error.message).toContain('dismissed');
     });
   });
+
+  describe('tab_navigate (C-12)', () => {
+    const ORIGIN = 'https://docs.example.com';
+    const NAV_DEST = 'https://docs.example.com/new-page';
+    const CROSS_DEST = 'https://other.example.com/page';
+
+    /** Fresh act+allowNavigate grant on tab 1. */
+    function mintNav() {
+      return mintGrant(1, ORIGIN, Date.now(), 'act', false, true);
+    }
+
+    function mockTab(url = ORIGIN + '/') {
+      mock.tabs.get.mockResolvedValue({ id: 1, url });
+    }
+
+    /** Emit a load-complete event (optionally with the observed URL). */
+    function simulateLoadComplete(url?: string) {
+      mock.tabs.onUpdated.emit(1, url ? { status: 'complete', url } : { status: 'complete' });
+    }
+
+    /**
+     * Fake-timer helper: flush the async pre-dispatch chain (storage reads,
+     * tabs.update) without advancing the clock, then advance past the named
+     * millisecond mark. Mirrors the precedent in approvals.test.ts:49-51.
+     */
+    async function flushAndAdvance(ms: number) {
+      await vi.advanceTimersByTimeAsync(0);
+      vi.advanceTimersByTime(ms);
+    }
+
+    // ── Capability gate ────────────────────────────────────────────────
+    it('navigate_not_allowed when the flag is off (act grant, no allowNavigate)', async () => {
+      void (await mintGrant(1, ORIGIN, Date.now(), 'act'));
+      mockTab();
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_not_allowed');
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    it('observe_only for observe-mode grant even with allowNavigate on', async () => {
+      void (await mintGrant(1, ORIGIN, Date.now(), 'observe', false, true));
+      mockTab();
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('observe_only');
+    });
+
+    // ── §3.1 URL validation ────────────────────────────────────────────
+    it('navigate_bad_url: rejected schemes', async () => {
+      void (await mintNav());
+      mockTab();
+      for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', 'about:blank']) {
+        const res = await handleToolCall(call('tab_navigate', { url: bad }));
+        expect(res.ok).toBe(false);
+        if (!res.ok) expect(res.error.code).toBe('navigate_bad_url');
+      }
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    it('navigate_bad_url: embedded credentials rejected', async () => {
+      void (await mintNav());
+      mockTab();
+      const res = await handleToolCall(call('tab_navigate', { url: 'https://user:pass@example.com/' }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_bad_url');
+    });
+
+    it('navigate_bad_url: fragment-only navigation rejected', async () => {
+      void (await mintNav());
+      mockTab();
+      const res = await handleToolCall(call('tab_navigate', { url: '#section' }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_bad_url');
+    });
+
+    it('navigate_bad_url: absolute fragment-only URL to the current page rejected', async () => {
+      void (await mintNav());
+      mockTab(ORIGIN + '/');
+      const res = await handleToolCall(call('tab_navigate', { url: ORIGIN + '/#other-anchor' }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_bad_url');
+      expect(res.error.message).toContain('Fragment-only');
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    it('navigate_bad_url: unparseable string rejected', async () => {
+      void (await mintNav());
+      mockTab();
+      const res = await handleToolCall(call('tab_navigate', { url: 'not a url at all' }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_bad_url');
+    });
+
+    it('navigate_bad_url: URL above the 2048-char limit rejected', async () => {
+      void (await mintNav());
+      mockTab();
+      const long = 'https://example.com/' + 'a'.repeat(2100);
+      const res = await handleToolCall(call('tab_navigate', { url: long }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('navigate_bad_url');
+      expect(res.error.message).toContain('2048');
+    });
+
+    it('navigate_bad_url: backslash / control char pre-checks', async () => {
+      void (await mintNav());
+      mockTab();
+      const withBackslash = await handleToolCall(call('tab_navigate', { url: 'https://example.com/\\evil' }));
+      expect(withBackslash.ok).toBe(false);
+      if (!withBackslash.ok) expect(withBackslash.error.code).toBe('navigate_bad_url');
+      const withControl = await handleToolCall(call('tab_navigate', { url: 'https://example.com/\u0000evil' }));
+      expect(withControl.ok).toBe(false);
+      if (!withControl.ok) expect(withControl.error.code).toBe('navigate_bad_url');
+    });
+
+    // ── URL normalization battery (spec §6) ────────────────────────────
+    it('URL normalization battery: case, IPv6, trailing slash, %2F, empty-userinfo', async () => {
+      void (await mintNav());
+      mockTab();
+      // Every URL below is a valid http(s) URL that must PASS validation
+      // (i.e. NOT rejected as navigate_bad_url). Host case, trailing slash,
+      // encoded slash, and empty userinfo all normalize to a parseable origin.
+      const battery = [
+        'https://DOCS.example.com/page', // host case → normalizes to docs.example.com (same-origin)
+        'https://docs.example.com/', // trailing slash
+        'https://docs.example.com/a%2Fb/c', // %2F in the path (encoded slash)
+        'https://@docs.example.com/page', // empty userinfo
+      ];
+      for (const url of battery) {
+        mock.tabs.update.mockClear();
+        mock.tabs.update.mockImplementation(async () => {
+          simulateLoadComplete(url);
+          return { id: 1, url };
+        });
+        const res = await handleToolCall(call('tab_navigate', { url }));
+        // Not a validation rejection:
+        if (!res.ok) {
+          expect(res.error.code).not.toBe('navigate_bad_url');
+        } else {
+          // These are same-origin → no approval, dispatched.
+          expect(res.result).toBeTruthy();
+        }
+      }
+      // IPv6: the origin is a different host → cross-origin → reaches approval.
+      mock.tabs.update.mockClear();
+      mock.tabs.update.mockResolvedValue({ id: 1, url: 'https://[::1]:8443/x' });
+      const ip6 = handleToolCall(call('tab_navigate', { url: 'https://[::1]:8443/x' }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      expect(getPendingApproval()!.steps[0]?.kind).toBe('navigate');
+      decideApproval(getPendingApproval()!.opId, false);
+      await ip6;
+    });
+
+    it('URL normalization: explicit default port is same-origin (no approval)', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete('https://docs.example.com:443/page');
+        return { id: 1, url: 'https://docs.example.com:443/page' };
+      });
+      const promise = handleToolCall(call('tab_navigate', { url: 'https://docs.example.com:443/page' }));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(getPendingApproval()).toBeNull();
+      const res = await promise;
+      expect(res.ok).toBe(true);
+    });
+
+    it('URL normalization: explicit non-default port is cross-origin (approval)', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockResolvedValue({ id: 1, url: 'https://docs.example.com:8443/x' });
+      const promise = handleToolCall(call('tab_navigate', { url: 'https://docs.example.com:8443/x' }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      expect(getPendingApproval()!.steps[0]?.kind).toBe('navigate');
+      decideApproval(getPendingApproval()!.opId, false);
+      await promise;
+    });
+
+    // ── Two-tier: cross-origin NO LONGER rejected → reaches approval ──
+    it('cross-origin is not rejected up-front: it reaches the approval card', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockResolvedValue(undefined);
+      const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      const card = getPendingApproval()!;
+      expect(card.steps[0]?.kind).toBe('navigate');
+      expect(card.steps[0]?.target).toContain(CROSS_DEST);
+      expect(card.steps[0]?.detail).toContain('DIFFERENT origin');
+      decideApproval(card.opId, false);
+      await promise;
+    });
+
+    // ── Same-origin success (no card, either tier) ─────────────────────
+    it('same-origin: no approval, complete, grant stays active', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete(NAV_DEST);
+        return { id: 1, url: NAV_DEST };
+      });
+      const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(getPendingApproval()).toBeNull();
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { requestedUrl: string; finalUrl: string; loadState: string; grantStatus: string };
+      expect(result.requestedUrl).toBe(NAV_DEST);
+      expect(result.finalUrl).toBe(NAV_DEST);
+      expect(result.loadState).toBe('complete');
+      expect(result.grantStatus).toBe('active');
+      expect(mock.tabs.update).toHaveBeenCalledWith(1, { url: NAV_DEST });
+    });
+
+    it('Freaky-on + same-origin → no card, audits action_auto_approved + navigate_dispatched', async () => {
+      const grant = await mintNav();
+      await setAutoApprove(grant.grantId, true);
+      mockTab();
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete(NAV_DEST);
+        return { id: 1, url: NAV_DEST };
+      });
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(true);
+      expect(getPendingApproval()).toBeNull();
+      const types = (await getAudit()).map((e) => e.type);
+      expect(types).toContain('action_auto_approved');
+      expect(types).toContain('navigate_dispatched');
+      expect(types).toContain('navigate_completed');
+      // Navigate events carry grantId (F2 forensic join).
+      const navEvents = (await getAudit()).filter((e) => e.type === 'navigate_dispatched');
+      expect(navEvents[0]?.grantId).toBe(grant.grantId);
+    });
+
+    it('Freaky-on + cross-origin → card STILL appears (v3 guard)', async () => {
+      const grant = await mintNav();
+      await setAutoApprove(grant.grantId, true); // Freaky is on
+      mockTab();
+      mock.tabs.update.mockResolvedValue(undefined);
+      const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      // The v3 guard: Freaky does NOT bypass a cross-origin boundary card.
+      expect(getPendingApproval()).not.toBeNull();
+      decideApproval(getPendingApproval()!.opId, false);
+      await promise;
+    });
+
+    // ── Cross-origin success → suspended receipt ───────────────────────
+    it('cross-origin: approve → dispatch, receipt shows suspended + new origin', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete(CROSS_DEST);
+        return { id: 1, url: CROSS_DEST };
+      });
+      // After the load, the tab is at CROSS_DEST; post-load revalidation sees
+      // the origin changed → suspends the grant. Pre-load calls (routeToolCall,
+      // post-approval revalidation, pre-dispatch revalidation) all see ORIGIN.
+      let getCall = 0;
+      mock.tabs.get.mockImplementation(async () => {
+        getCall += 1;
+        if (getCall <= 3) return { id: 1, url: ORIGIN + '/' };
+        return { id: 1, url: CROSS_DEST };
+      });
+      const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      decideApproval(getPendingApproval()!.opId, true);
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { loadState: string; grantStatus: string; finalUrl: string };
+      expect(result.loadState).toBe('complete');
+      expect(result.grantStatus).toBe('suspended');
+      expect(result.finalUrl).toBe(CROSS_DEST);
+    });
+
+    it('cross-origin: deny → approval_denied, tab never updated', async () => {
+      void (await mintNav());
+      mockTab();
+      const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      decideApproval(getPendingApproval()!.opId, false);
+      const res = await promise;
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('approval_denied');
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    it('redirect chain: requested B, lands C → receipt shows finalUrl C', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete('https://docs.example.com/final');
+        return { id: 1, url: 'https://docs.example.com/final' };
+      });
+      const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      await new Promise((r) => setTimeout(r, 50));
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { requestedUrl: string; finalUrl: string; loadState: string };
+      expect(result.requestedUrl).toBe(NAV_DEST);
+      expect(result.finalUrl).toBe('https://docs.example.com/final');
+      expect(result.loadState).toBe('complete');
+    });
+
+    it('same-origin dispatch whose redirect lands off-origin → suspended', async () => {
+      // The agent requests a same-origin URL (so no approval card is shown),
+      // but the page 301-redirects to a different origin. The post-load
+      // revalidation sees the off-origin URL → suspends the grant. This is the
+      // "off-origin redirect" path the origin pin exists to catch.
+      void (await mintNav());
+      mockTab();
+      const OFF_ORIGIN = 'https://redirected.example.com/landed';
+      mock.tabs.update.mockImplementation(async () => {
+        // The redirect chain: the tab's final URL is off-origin.
+        simulateLoadComplete(OFF_ORIGIN);
+        return { id: 1, url: OFF_ORIGIN };
+      });
+      // Post-load: the tab now sits on the off-origin URL.
+      let getCall = 0;
+      mock.tabs.get.mockImplementation(async () => {
+        getCall += 1;
+        if (getCall <= 2) return { id: 1, url: ORIGIN + '/' };
+        return { id: 1, url: OFF_ORIGIN };
+      });
+      const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      await new Promise((r) => setTimeout(r, 50));
+      // No approval was requested (same-origin request).
+      expect(getPendingApproval()).toBeNull();
+      const res = await promise;
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { loadState: string; grantStatus: string; finalUrl: string };
+      expect(result.finalUrl).toBe(OFF_ORIGIN);
+      expect(result.grantStatus).toBe('suspended');
+      expect(result.loadState).toBe('complete');
+    });
+
+    // ── chrome-error final URL → suspended + error prose ───────────────
+    it('chrome-error final URL → suspended receipt + error prose', async () => {
+      void (await mintNav());
+      mockTab();
+      const ERROR_URL = 'chrome-error://chromewebdata/';
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete(ERROR_URL);
+        return { id: 1, url: ERROR_URL };
+      });
+      // Post-load: the tab is on the chrome-error page (origin mismatch).
+      let getCall = 0;
+      mock.tabs.get.mockImplementation(async () => {
+        getCall += 1;
+        if (getCall <= 2) return { id: 1, url: ORIGIN + '/' };
+        return { id: 1, url: ERROR_URL };
+      });
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { loadState: string; grantStatus: string; finalUrl: string };
+      expect(result.grantStatus).toBe('suspended');
+      expect(result.finalUrl).toBe(ERROR_URL);
+      expect(result.loadState).toBe('complete');
+    });
+
+    // ── load-wait timeout (fake timers) + cleanup invariant ────────────
+    it('30 s load-wait timeout → loadState timeout, no retry, cleanup invariant holds', async () => {
+      vi.useFakeTimers();
+      try {
+        void (await mintNav());
+        mockTab();
+        mock.tabs.update.mockResolvedValue({ id: 1, url: NAV_DEST });
+        // No onUpdated complete event ever fires → the 30 s timeout wins.
+        const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+        await flushAndAdvance(30_001);
+        const res = await promise;
+        expect(res.ok).toBe(true);
+        if (!res.ok) return;
+        const result = res.result as { loadState: string };
+        expect(result.loadState).toBe('timeout');
+        // No retry: tabs.update was called exactly once.
+        expect(mock.tabs.update).toHaveBeenCalledTimes(1);
+        // Cleanup invariant: the onUpdated listener was removed (no dangling
+        // listener that could fire on the user's NEXT navigation).
+        expect(mock.tabs.onUpdated.hasListener(expect.any(Function))).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 10_000);
+
+    it('cleanup invariant: complete event also removes the listener + timer', async () => {
+      vi.useFakeTimers();
+      try {
+        void (await mintNav());
+        mockTab();
+        mock.tabs.update.mockImplementation(async () => {
+          simulateLoadComplete(NAV_DEST);
+          return { id: 1, url: NAV_DEST };
+        });
+        const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+        await vi.advanceTimersByTimeAsync(0);
+        const res = await promise;
+        expect(res.ok).toBe(true);
+        if (res.ok) expect((res.result as { loadState: string }).loadState).toBe('complete');
+        expect(mock.tabs.onUpdated.hasListener(expect.any(Function))).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 10_000);
+
+    // ── tab closed mid-wait → grant_revoked ────────────────────────────
+    it('tab closed mid-wait → grant_revoked (post-load re-validation finds no tab)', async () => {
+      vi.useFakeTimers();
+      try {
+        void (await mintNav());
+        mockTab();
+        mock.tabs.update.mockResolvedValue({ id: 1, url: NAV_DEST });
+        // Pre-dispatch calls (routeToolCall + preDispatch) succeed; the
+        // post-load revalidation (call 3+) finds the tab gone → grant_revoked.
+        let getCall = 0;
+        mock.tabs.get.mockImplementation(async () => {
+          getCall += 1;
+          if (getCall <= 2) return { id: 1, url: ORIGIN + '/' };
+          throw new Error('No tab with given id.');
+        });
+        const promise = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+        await flushAndAdvance(30_001); // load-wait times out
+        const res = await promise;
+        expect(res.ok).toBe(false);
+        if (res.ok) return;
+        expect(res.error.code).toBe('grant_revoked');
+        expect(mock.tabs.onUpdated.hasListener(expect.any(Function))).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 10_000);
+
+    // ── grant expired / suspended mid-wait ─────────────────────────────
+    it('grant expired mid-wait → re-validation fails closed (grant_expired)', async () => {
+      // Mint a grant that expires ~immediately (past its 30-min TTL).
+      void (await mintGrant(1, ORIGIN, Date.now() - 30 * 60 * 1000 - 1_000, 'act', false, true));
+      mockTab();
+      mock.tabs.update.mockResolvedValue({ id: 1, url: NAV_DEST });
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('grant_expired');
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    it('grant suspended mid-approval → re-validation fails closed (grant_suspended)', async () => {
+      const grant = await mintNav();
+      mockTab();
+      mock.tabs.update.mockResolvedValue(undefined);
+      const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      // User suspends the grant while the approval card is up.
+      await suspendGrant(grant.grantId);
+      decideApproval(getPendingApproval()!.opId, true);
+      const res = await promise;
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe('grant_suspended');
+      expect(mock.tabs.update).not.toHaveBeenCalled();
+    });
+
+    // ── conflict attribution (user nav during wait) ────────────────────
+    it('conflict: user navigated during the wait → loadState conflict (same-origin grant)', async () => {
+      void (await mintNav());
+      mockTab();
+      const USER_NAV_URL = 'https://docs.example.com/user-navigated';
+      // Our dispatch completes, but the observed final URL is the user's
+      // navigation, which was never the requested URL and never observed as a
+      // changeInfo.url during our wait.
+      mock.tabs.update.mockImplementation(async () => {
+        // Complete with NO url (the URL was set by tabs.update, not a redirect),
+        // so wait.finalUrl is undefined → the post-load tabs.get fallback runs.
+        simulateLoadComplete(undefined);
+        return { id: 1, url: NAV_DEST };
+      });
+      let getCall = 0;
+      mock.tabs.get.mockImplementation(async () => {
+        getCall += 1;
+        if (getCall <= 2) return { id: 1, url: ORIGIN + '/' };
+        // Post-load: the user has navigated to a different same-origin page.
+        return { id: 1, url: USER_NAV_URL };
+      });
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { loadState: string; grantStatus: string; finalUrl: string };
+      expect(result.finalUrl).toBe(USER_NAV_URL);
+      expect(result.loadState).toBe('conflict');
+      expect(result.grantStatus).toBe('active'); // same-origin: grant untouched
+    });
+
+    it('conflict + suspended receipt (F7): user navigated to another origin during the wait', async () => {
+      void (await mintNav());
+      mockTab();
+      const USER_NAV_URL = 'https://user-origin.example/other';
+      mock.tabs.update.mockImplementation(async () => {
+        simulateLoadComplete(undefined);
+        return { id: 1, url: NAV_DEST };
+      });
+      let getCall = 0;
+      mock.tabs.get.mockImplementation(async () => {
+        getCall += 1;
+        if (getCall <= 2) return { id: 1, url: ORIGIN + '/' };
+        return { id: 1, url: USER_NAV_URL };
+      });
+      const res = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const result = res.result as { loadState: string; grantStatus: string; finalUrl: string };
+      expect(result.finalUrl).toBe(USER_NAV_URL);
+      expect(result.loadState).toBe('conflict');
+      // The final URL is off-origin → the grant is suspended (F7 receipt shape).
+      expect(result.grantStatus).toBe('suspended');
+    });
+
+    // ── busy: parallel Freaky navigates AND approval-pending ───────────
+    it('busy: a second same-origin navigate while the first is in flight', async () => {
+      vi.useFakeTimers();
+      try {
+        void (await mintNav());
+        mockTab();
+        // First navigate: dispatch succeeds, but the load never completes →
+        // it stays in flight (30 s load-wait).
+        mock.tabs.update.mockResolvedValue({ id: 1, url: NAV_DEST });
+        const first = handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+        // Flush the pre-dispatch chain (storage reads, tabs.update) without
+        // advancing the clock, so the first navigate is in flight.
+        await vi.advanceTimersByTimeAsync(0);
+        // Second navigate (same grant): must be rejected as busy.
+        const second = await handleToolCall(call('tab_navigate', { url: NAV_DEST }));
+        expect(second.ok).toBe(false);
+        if (second.ok) return;
+        expect(second.error.code).toBe('busy');
+        expect(mock.tabs.update).toHaveBeenCalledTimes(1);
+        // Let the first one finish (load-wait timeout) to drain the in-flight set.
+        vi.advanceTimersByTime(30_001);
+        await first;
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 10_000);
+
+    it('busy: a cross-origin navigate while another approval is pending', async () => {
+      void (await mintNav());
+      mockTab();
+      mock.tabs.update.mockResolvedValue(undefined);
+      // First cross-origin navigate: an approval card is pending.
+      const first = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      await vi.waitFor(() => expect(getPendingApproval()).not.toBeNull());
+      // Second cross-origin navigate: the approval gate is one-at-a-time → busy.
+      const second = await handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(second.error.code).toBe('busy');
+      // Resolve the first.
+      decideApproval(getPendingApproval()!.opId, false);
+      await first;
+    }, 10_000);
+
+    // ── action_timeout audit path (110 s fake timers) ──────────────────
+    it('cross-origin approval times out (110 s) → approval_timeout + action_timeout audit', async () => {
+      vi.useFakeTimers();
+      try {
+        void (await mintNav());
+        mockTab();
+        mock.tabs.update.mockResolvedValue(undefined);
+        const promise = handleToolCall(call('tab_navigate', { url: CROSS_DEST }));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(getPendingApproval()).not.toBeNull();
+        // Advance past the 110 s approval window.
+        vi.advanceTimersByTime(110_001);
+        const res = await promise;
+        expect(res.ok).toBe(false);
+        if (res.ok) return;
+        expect(res.error.code).toBe('approval_timeout');
+        expect(mock.tabs.update).not.toHaveBeenCalled();
+        const types = (await getAudit()).map((e) => e.type);
+        expect(types).toContain('action_timeout');
+        expect(types).toContain('action_proposed');
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 10_000);
+  });
 });

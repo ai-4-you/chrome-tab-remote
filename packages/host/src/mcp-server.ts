@@ -9,12 +9,15 @@ import {
   ERROR_RECOVERY,
   FindResultSchema,
   GrantListResultSchema,
+  NavigateResultSchema,
+  NAVIGATE_TOOL_TIMEOUT_MS,
   PLAN_MAX_STEPS,
   SCROLL_DEFAULT_PIXELS,
   PlanResultSchema,
   PlanStepSchema,
   renderFindResult,
   renderGrants,
+  renderNavigateResult,
   renderPlanResult,
   renderSnapshot,
   renderTabReadManyResult,
@@ -121,6 +124,22 @@ export function createToolHandlers(bridge: ToolBridge, now: () => number = () =>
             { type: 'image', data: parsed.data.data, mimeType: parsed.data.mimeType },
           ],
         };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    tabNavigate: async ({ grantId, url }: { grantId?: string; url: string }): Promise<CallToolResult> => {
+      try {
+        // Long per-call timeout: the user-approval wait (up to 110 s) and the
+        // 30 s load wait both happen inside this call. The 15 s default bridge
+        // timeout would kill the call mid-approval-card.
+        const raw = await bridge.callTool(
+          'tab_navigate',
+          grantParams(grantId, { url }),
+          NAVIGATE_TOOL_TIMEOUT_MS,
+        );
+        const parsed = NavigateResultSchema.safeParse(raw);
+        return parsed.success ? textResult(renderNavigateResult(parsed.data)) : okResult(raw);
       } catch (error) {
         return errorResult(error);
       }
@@ -277,6 +296,35 @@ export function createMcpServer(bridge: ToolBridge): McpServer {
       inputSchema: { grantId: GRANT_ID_INPUT },
     },
     handlers.tabScreenshotViewport,
+  );
+
+  server.registerTool(
+    'tab_navigate',
+    {
+      description:
+        'Navigate the granted tab to a URL via chrome.tabs.update. Requires an act grant with the user ' +
+        'explicitly enabling "Allow Navigate" in the side panel (act grants only). Any plain http(s) URL ' +
+        'is a legal destination; the full URL is the unit of consent (the user approves the exact URL, ' +
+        'not just its origin). Same-origin destinations keep the grant active; CROSS-ORIGIN destinations ' +
+        'suspense the grant (the origin pin G-3 suspends automatically) and require the user to ' +
+        're-confirm on the new origin in the side panel — auto-approve and viewport screenshots are ' +
+        'RESET there on a new origin (§2.7). A cross-origin navigate ALWAYS pauses for explicit user ' +
+        'approval; Freaky mode (auto-approve) bypasses SAME-ORIGIN navigates only. This call can take ' +
+        'up to ~2.5 minutes (approval wait + 30 s load wait); tell the user to look at the panel. ' +
+        'The receipt is honest about loadState (complete/timeout/conflict) and grantStatus ' +
+        '(active/suspended). After a navigate, snapshot refs are invalid — take a fresh tab_snapshot. ' +
+        'tab_screenshot_viewport may require the user to re-invoke the toolbar action after a ' +
+        'same-origin navigate; cross-origin it is off until re-confirm.',
+      inputSchema: {
+        grantId: GRANT_ID_INPUT,
+        url: z
+          .string()
+          .min(1)
+          .max(2048)
+          .describe('The http:// or https:// URL to navigate to. No javascript:, file:, data:, or credential-bearing URLs.'),
+      },
+    },
+    ({ grantId, url }) => handlers.tabNavigate({ grantId, url }),
   );
 
   server.registerTool(

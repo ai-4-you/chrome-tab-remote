@@ -5,7 +5,7 @@
 import { APPROVAL_TIMEOUT_MS } from '@ctr/shared';
 
 export interface ApprovalStep {
-  kind: 'click' | 'fill' | 'select' | 'scroll';
+  kind: 'click' | 'fill' | 'select' | 'scroll' | 'navigate';
   /** Human description of the target element, e.g. 'button "Save"'. */
   target: string;
   /** What would be typed/chosen — shown verbatim to the user before approving. */

@@ -10,12 +10,13 @@ async function readGrants(): Promise<Grant[]> {
   const data = await chrome.storage.session.get(STORAGE_KEY);
   const grants = data[STORAGE_KEY];
   if (!Array.isArray(grants)) return [];
-  // Grants persisted before viewport screenshots existed lack this field. Normalize
-  // them at the storage boundary to preserve the explicit default-deny contract.
+  // Grants persisted before the new flags existed lack them. Normalize them at
+  // the storage boundary to preserve the explicit default-deny contract.
   return grants.map((grant) => ({
     ...(grant as object),
     allowViewportScreenshot:
       (grant as { allowViewportScreenshot?: unknown }).allowViewportScreenshot === true,
+    allowNavigate: (grant as { allowNavigate?: unknown }).allowNavigate === true,
   })) as Grant[];
 }
 
@@ -42,6 +43,7 @@ export async function mintGrant(
   now: number = Date.now(),
   mode: GrantMode = 'observe',
   allowViewportScreenshot = false,
+  allowNavigate = false,
 ): Promise<Grant> {
   const grant: Grant = {
     grantId: crypto.randomUUID(),
@@ -49,6 +51,7 @@ export async function mintGrant(
     origin,
     mode,
     allowViewportScreenshot,
+    allowNavigate,
     status: 'active',
     expiresAt: new Date(now + DEFAULT_GRANT_TTL_MS).toISOString(),
     createdByGesture: true,
@@ -110,10 +113,24 @@ export async function suspendGrant(grantId: string): Promise<Grant | undefined> 
 /**
  * User re-confirmed a suspended grant: re-pin to the tab's current origin and
  * reactivate. Expiry is NOT extended — the original TTL stands (fail closed).
+ *
+ * Origin-transition consent rule (§2.7): re-pinning to a DIFFERENT origin than
+ * before force-resets the high-risk capability flags — auto-approve and
+ * viewport screenshots are OFF on the new origin, regardless of the currently
+ * stored flags (a stale toggle must never survive the transition). `mode` and
+ * `allowNavigate` persist. Re-confirming to the SAME origin (e.g. recovering
+ * from a chrome-error suspension) does NOT reset.
  */
 export async function reconfirmGrant(
   grantId: string,
   origin: string,
 ): Promise<Grant | undefined> {
-  return updateGrant(grantId, { origin, status: 'active' });
+  const existing = await getGrant(grantId);
+  if (!existing) return undefined;
+  const originChanged = existing.origin !== origin;
+  return updateGrant(grantId, {
+    origin,
+    status: 'active',
+    ...(originChanged ? { autoApprove: false, allowViewportScreenshot: false } : {}),
+  });
 }

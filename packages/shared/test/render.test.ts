@@ -84,6 +84,7 @@ describe('renderGrants', () => {
     origin: 'https://app.example.com',
     mode: 'observe',
     allowViewportScreenshot: false,
+    allowNavigate: false,
     status: 'active',
     expiresAt: '2026-08-02T10:12:30.000Z',
     createdByGesture: true,
@@ -109,6 +110,12 @@ describe('renderGrants', () => {
     const text = renderGrants([grant], NOW + 60 * 60 * 1000);
     expect(text).toContain('— expired; the user must grant the tab again in the side panel');
     expect(text).not.toContain('active');
+  });
+
+  it('announces allow-navigate consent so the agent knows tab_navigate is authorized', () => {
+    const text = renderGrants([{ ...grant, mode: 'act', allowNavigate: true }], NOW);
+    expect(text).toContain(', allow navigate ON');
+    expect(renderGrants([grant], NOW)).not.toContain('allow navigate');
   });
 
   it('announces auto-approve so the agent knows the pause is off', () => {

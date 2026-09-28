@@ -6,7 +6,7 @@ import { originOf } from '@ctr/shared';
 
 interface PendingApproval {
   opId: string;
-  steps: { kind: 'click' | 'fill' | 'select' | 'scroll'; target: string; detail?: string }[];
+  steps: { kind: 'click' | 'fill' | 'select' | 'scroll' | 'navigate'; target: string; detail?: string }[];
   origin: string;
   deadline: number;
 }
@@ -41,6 +41,7 @@ const els = {
   tabOrigin: $('current-tab-origin'),
   tabShareStatus: $('tab-share-status'),
   viewportScreenshotMode: $('viewport-screenshot-mode') as HTMLInputElement,
+  allowNavigateMode: $('allow-navigate-mode') as HTMLInputElement,
   actMode: $('act-mode') as HTMLInputElement,
   grantBtn: $('grant-btn') as HTMLButtonElement,
   grantError: $('grant-error'),
@@ -49,6 +50,7 @@ const els = {
   grantStatus: $('grant-status'),
   grantExpiry: $('grant-expiry'),
   reconfirmBtn: $('reconfirm-btn') as HTMLButtonElement,
+  reconfirmResetLine: $('reconfirm-reset-line'),
   revokeBtn: $('revoke-btn') as HTMLButtonElement,
   freakyRow: $('freaky-row'),
   freakyToggle: $('freaky-toggle') as HTMLInputElement,
@@ -182,9 +184,19 @@ function renderGrant(): void {
     // Informed consent: show exactly which origin a re-confirm would re-pin to.
     els.reconfirmBtn.textContent = pendingOrigin ? `Re-confirm for ${pendingOrigin}` : 'Re-confirm';
     els.reconfirmBtn.disabled = suspended && !pendingOrigin;
+    // Origin-transition consent rule (§2.7): when the suspended grant's origin
+    // differs from where it was minted (the tab moved cross-origin), the
+    // re-confirm will RESET auto-approve + viewport screenshots. State that as
+    // a fact, danger-styled, ABOVE the confirm button (not fine print).
+    const originChanged = suspended && pendingOrigin !== null && pendingOrigin !== grant.origin;
+    els.reconfirmResetLine.classList.toggle('hidden', !originChanged);
     // Freaky mode: act grants only, live-toggleable while the agent works.
     els.freakyRow.classList.toggle('hidden', grant.mode !== 'act');
     els.freakyToggle.checked = grant.autoApprove === true;
+    // A suspended grant must NOT show a live Freaky toggle: a re-click before
+    // re-confirm would look like it re-enables YOLO even though the re-pin
+    // force-sets it off (§2.7). Disable it while suspended.
+    els.freakyToggle.disabled = suspended;
   }
 
   // "Granted on another tab" card: only when a grant exists elsewhere.
@@ -353,6 +365,7 @@ els.grantBtn.addEventListener('click', () => {
       tabId: currentTab.id,
       mode: els.actMode.checked ? 'act' : 'observe',
       allowViewportScreenshot: els.viewportScreenshotMode.checked,
+      allowNavigate: els.allowNavigateMode.checked,
     })) as { ok: boolean; error?: string };
     if (!res.ok) showError(res.error ?? 'Grant failed.');
     await refresh();

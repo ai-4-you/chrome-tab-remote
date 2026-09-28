@@ -2,7 +2,7 @@
 // consumer is a language model, so readable text IS the machine format
 // (see AGENTS.md design principles).
 import type { Grant } from './grant.js';
-import type { ActionResult, FindResult, PlanResult, TabReadManyResult } from './messages.js';
+import type { ActionResult, FindResult, NavigateResult, PlanResult, TabReadManyResult } from './messages.js';
 import type { SnapshotNode, SnapshotResult } from './snapshot.js';
 
 function renderNode(node: SnapshotNode, depth: number, out: string[]): void {
@@ -60,8 +60,9 @@ export function renderGrants(grants: Grant[], now: number): string {
         );
       }
       const screenshot = g.allowViewportScreenshot ? ', viewport screenshots ON' : '';
+      const navigate = g.allowNavigate ? ', allow navigate ON' : '';
       const auto = g.autoApprove ? ', auto-approve ON (actions run without the approval pause)' : '';
-      const line = `${g.mode} grant for ${g.origin} — ${g.status}${screenshot}${auto}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
+      const line = `${g.mode} grant for ${g.origin} — ${g.status}${screenshot}${navigate}${auto}, expires in ~${Math.ceil(msLeft / 60_000)} min (grantId ${g.grantId})`;
       return g.status === 'suspended'
         ? `${line} — the user must click 'Re-confirm' in the side panel to resume access`
         : line;
@@ -145,6 +146,64 @@ export function renderTabReadManyResult(result: TabReadManyResult): string {
       return `### ${item.ref}\n${body}`;
     })
     .join('\n\n');
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Render a navigate receipt as prose (spec §3.5). Two-tier: same-origin gets a
+ * normal "Navigated … (loaded)" line; cross-origin states the suspension +
+ * re-confirm + capability reset explicitly. Every result ends with the ref
+ * invalidation + the screenshot re-invoke hint.
+ */
+export function renderNavigateResult(result: NavigateResult): string {
+  const out: string[] = [];
+  if (result.loadState === 'timeout') {
+    out.push(
+      `Navigated ${result.requestedUrl} — navigation dispatched; the page was still loading after the 30 s wait. ` +
+        'An immediate tab_snapshot may fail (tab_unreachable) while the channel re-injects — wait ~5 s, then tab_snapshot.',
+    );
+  } else if (result.loadState === 'conflict') {
+    if (result.grantStatus === 'suspended') {
+      out.push(
+        `The tab now shows ${result.finalUrl}, which this call did not load — and it is a different origin, so the grant is SUSPENDED. ` +
+          'Ask the user to re-confirm for that origin in the side panel (or request_grant); auto-approve and screenshots are reset there (§2.7).',
+      );
+    } else {
+      out.push(`The tab now shows ${result.finalUrl}, which this call did not load; take a snapshot to see where you are.`);
+    }
+  } else {
+    if (result.finalUrl.startsWith('chrome-error:')) {
+      out.push(
+        `Navigated ${result.requestedUrl} — the load FAILED: the tab is on a Chrome error page (DNS failure or offline). ` +
+          'The grant is suspended. Ask the user to re-confirm the grant in the side panel (or request_grant) once the page is reachable again.',
+      );
+    } else if (result.grantStatus === 'suspended') {
+      const oldOrigin = originOf(result.requestedUrl) ?? result.requestedUrl;
+      out.push(
+        `Navigated to ${result.finalUrl} (loaded) — a DIFFERENT origin. ` +
+          `The grant for ${oldOrigin} is SUSPENDED. Ask the user to re-confirm the grant for the new origin in the side panel ` +
+          '(or request_grant); auto-approve and screenshots are reset there (§2.7).',
+      );
+    } else {
+      out.push(
+        result.finalUrl === result.requestedUrl
+          ? `Navigated to ${result.requestedUrl} (loaded).`
+          : `Navigated ${result.requestedUrl} → ${result.finalUrl} (loaded).`,
+      );
+    }
+  }
+  out.push('Snapshot refs are invalid — take a fresh tab_snapshot.');
+  out.push(
+    'tab_screenshot_viewport may require the user to re-invoke the toolbar action (activeTab persistence after same-origin navigation is unverified; cross-origin it is off until re-confirm anyway).',
+  );
+  return out.join('\n');
 }
 
 /** Render tab_find matches as one snapshot-style line each. */

@@ -68,10 +68,20 @@ export function createChromeMock() {
       captureVisibleTab: vi.fn(async (_windowId: number, _options: unknown): Promise<string> => {
         throw new Error('capture not configured');
       }),
+      update: vi.fn(async (_tabId: number, _updateProperties: unknown): Promise<{
+        id: number;
+        url?: string;
+        title?: string;
+        active?: boolean;
+        windowId?: number;
+      } | undefined> => undefined),
       sendMessage: vi.fn(async (_tabId: number, _msg: unknown): Promise<unknown> => {
         throw new Error('Could not establish connection.');
       }),
-      onUpdated: new MockEvent<(tabId: number, changeInfo: { url?: string }) => void>(),
+      onUpdated: new MockEvent<(
+        tabId: number,
+        changeInfo: { status?: string; url?: string; title?: string; favIconUrl?: string; pinned?: boolean },
+      ) => void>(),
       onRemoved: new MockEvent<(tabId: number) => void>(),
       onActivated: new MockEvent<() => void>(),
     },

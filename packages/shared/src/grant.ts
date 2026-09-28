@@ -23,6 +23,13 @@ export const GrantSchema = z.object({
   /** Explicit, session-scoped consent to expose pixels from the visible tab viewport. */
   allowViewportScreenshot: z.boolean().default(false),
   /**
+   * Explicit consent to navigate the granted tab to a URL the agent chooses
+   * (tab_navigate). Off by default. Cross-origin destinations are legal; they
+   * suspend the grant's origin pin, which then requires an informed re-confirm
+   * (high-risk capability flags are reset on the new origin).
+   */
+  allowNavigate: z.boolean().default(false),
+  /**
    * User-controlled "YOLO" switch (act grants only): actions execute WITHOUT
    * the per-action approval pause. Off by default; toggleable live in the side
    * panel; dies with the grant — every new grant starts strict.

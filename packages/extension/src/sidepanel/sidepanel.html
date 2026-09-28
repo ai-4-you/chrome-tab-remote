@@ -25,6 +25,10 @@
         Allow ViewportScreenshot — shared with agent
       </label>
       <label class="checkbox-row">
+        <input type="checkbox" id="allow-navigate-mode" />
+        Allow Navigate — agent may navigate this tab to a URL (cross-origin suspends the grant)
+      </label>
+      <label class="checkbox-row">
         <input type="checkbox" id="act-mode" />
         Allow actions — single action approval (unless Freaky mode)
       </label>
@@ -85,6 +89,9 @@
         <input type="checkbox" id="freaky-toggle" />
         <span>⚡ <strong>Freaky mode</strong> — the agent acts WITHOUT asking (per-action approval off)</span>
       </label>
+      <div id="reconfirm-reset-line" class="reconfirm-reset-line hidden">
+        ⚠ Auto-approve and screenshots are now OFF on this origin. (High-risk capabilities reset on a new origin.)
+      </div>
       <div class="btn-row">
         <button id="reconfirm-btn" class="btn hidden">Re-confirm</button>
         <button id="revoke-btn" class="btn btn-danger">Revoke</button>

@@ -99,4 +99,70 @@ describe('grant-store', () => {
     const replacement = await mintGrant(1, ORIGIN, Date.now(), 'act');
     expect(replacement.autoApprove).toBeUndefined();
   });
+
+  it('mints a grant with allowNavigate pass-through', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', false, true);
+    expect(grant.allowNavigate).toBe(true);
+    expect((await getGrant(grant.grantId))?.allowNavigate).toBe(true);
+
+    const defaultGrant = await mintGrant(1, ORIGIN, Date.now(), 'act');
+    expect(defaultGrant.allowNavigate).toBe(false);
+  });
+
+  it('normalizes a legacy grant without allowNavigate to false', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', false, true);
+    const { allowNavigate: _omitted, ...legacyGrant } = grant;
+    await chrome.storage.session.set({ ctrGrants: [legacyGrant] });
+    expect((await getGrant(grant.grantId))?.allowNavigate).toBe(false);
+  });
+
+  it('§2.7: re-pin to a DIFFERENT origin force-resets autoApprove + allowViewportScreenshot', async () => {
+    // Mint an act grant with Freaky + screenshots ON.
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', true, true);
+    await setAutoApprove(grant.grantId, true);
+    expect((await getGrant(grant.grantId))?.autoApprove).toBe(true);
+    expect((await getGrant(grant.grantId))?.allowViewportScreenshot).toBe(true);
+    expect((await getGrant(grant.grantId))?.allowNavigate).toBe(true);
+
+    // Suspend + re-pin to a different origin.
+    await suspendGrant(grant.grantId);
+    const reconfirmed = await reconfirmGrant(grant.grantId, 'https://new.example.com');
+    expect(reconfirmed?.origin).toBe('https://new.example.com');
+    expect(reconfirmed?.status).toBe('active');
+    // §2.7: high-risk flags reset on the new origin.
+    expect(reconfirmed?.autoApprove).toBe(false);
+    expect(reconfirmed?.allowViewportScreenshot).toBe(false);
+    // mode + allowNavigate persist.
+    expect(reconfirmed?.mode).toBe('act');
+    expect(reconfirmed?.allowNavigate).toBe(true);
+  });
+
+  it('§2.7: re-pin to the SAME origin does NOT reset (chrome-error recovery)', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', true, true);
+    await setAutoApprove(grant.grantId, true);
+    expect((await getGrant(grant.grantId))?.autoApprove).toBe(true);
+
+    // Suspend (e.g. chrome-error) and re-pin to the SAME origin.
+    await suspendGrant(grant.grantId);
+    const reconfirmed = await reconfirmGrant(grant.grantId, ORIGIN);
+    expect(reconfirmed?.origin).toBe(ORIGIN);
+    expect(reconfirmed?.status).toBe('active');
+    // No reset: the high-risk flags survive same-origin re-confirm.
+    expect(reconfirmed?.autoApprove).toBe(true);
+    expect(reconfirmed?.allowViewportScreenshot).toBe(true);
+  });
+
+  it('§2.7: re-pin force-sets false even when stored true (F1 regression)', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', true, true);
+    await setAutoApprove(grant.grantId, true);
+    // Directly set the stored flags to true (simulating a stale toggle state).
+    expect((await getGrant(grant.grantId))?.autoApprove).toBe(true);
+    expect((await getGrant(grant.grantId))?.allowViewportScreenshot).toBe(true);
+
+    // Re-pin to a different origin: the force-set must override the stored true.
+    await suspendGrant(grant.grantId);
+    const reconfirmed = await reconfirmGrant(grant.grantId, 'https://stale-toggle.example.com');
+    expect(reconfirmed?.autoApprove).toBe(false);
+    expect(reconfirmed?.allowViewportScreenshot).toBe(false);
+  });
 });

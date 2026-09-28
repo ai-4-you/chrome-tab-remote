@@ -9,7 +9,9 @@ import {
   GrantsChangedSchema,
   HostInfoSchema,
   NativeMessageSchema,
+  NavigateResultSchema,
   TOOL_NAMES,
+  NAVIGATE_TOOL_TIMEOUT_MS,
   PlanStepSchema,
   ActionResultSchema,
   SCROLL_DEFAULT_PIXELS,
@@ -24,6 +26,7 @@ const grant: Grant = {
   origin: 'https://app.example.com',
   mode: 'observe',
   allowViewportScreenshot: false,
+  allowNavigate: false,
   status: 'active',
   expiresAt: '2026-08-02T12:30:00.000Z',
   createdByGesture: true,
@@ -44,6 +47,7 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'tab_select',
       'tab_scroll',
       'tab_plan',
+      'tab_navigate',
     ]);
   });
 
@@ -51,6 +55,11 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
     expect(ACT_TOOL_NAMES).toContain('tab_scroll');
     expect(isActTool('tab_scroll')).toBe(true);
     expect(isActTool('tab_snapshot')).toBe(false);
+  });
+
+  it('tab_navigate is a tool but NOT an act tool (background-side branch, own gate)', () => {
+    expect(TOOL_NAMES).toContain('tab_navigate');
+    expect(isActTool('tab_navigate')).toBe(false);
   });
 
   it('exposes the agreed error codes', () => {
@@ -72,6 +81,8 @@ describe('TOOL_NAMES / ERROR_CODES', () => {
       'tab_not_visible',
       'screenshot_too_large',
       'screenshot_capture_failed',
+      'navigate_not_allowed',
+      'navigate_bad_url',
     ]);
   });
 
@@ -335,5 +346,57 @@ describe('NativeMessageSchema', () => {
 
   it('rejects an unknown kind', () => {
     expect(NativeMessageSchema.safeParse({ kind: 'ping' }).success).toBe(false);
+  });
+});
+
+describe('NavigateResultSchema', () => {
+  const BASE = {
+    requestedUrl: 'https://a.example/p',
+    finalUrl: 'https://a.example/p2',
+    loadState: 'complete' as const,
+    grantStatus: 'active' as const,
+  };
+
+  it.each(['complete', 'timeout', 'conflict'] as const)('accepts loadState %s', (loadState) => {
+    expect(NavigateResultSchema.safeParse({ ...BASE, loadState }).success).toBe(true);
+  });
+
+  it.each(['active', 'suspended'] as const)('accepts grantStatus %s', (grantStatus) => {
+    expect(NavigateResultSchema.safeParse({ ...BASE, grantStatus }).success).toBe(true);
+  });
+
+  it('accepts the cross-origin suspended receipt shape', () => {
+    expect(
+      NavigateResultSchema.safeParse({
+        requestedUrl: 'https://a.example/p',
+        finalUrl: 'https://b.example/x',
+        loadState: 'complete',
+        grantStatus: 'suspended',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a chrome-error final URL (not a parseable http(s) url)', () => {
+    expect(
+      NavigateResultSchema.safeParse({ ...BASE, finalUrl: 'chrome-error://chromewebdata/' }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an unknown loadState', () => {
+    expect(NavigateResultSchema.safeParse({ ...BASE, loadState: 'pending' }).success).toBe(false);
+  });
+
+  it('rejects an unknown grantStatus', () => {
+    expect(NavigateResultSchema.safeParse({ ...BASE, grantStatus: 'revoked' }).success).toBe(false);
+  });
+
+  it('rejects a malformed requestedUrl', () => {
+    expect(NavigateResultSchema.safeParse({ ...BASE, requestedUrl: 'not a url at all' }).success).toBe(false);
+  });
+});
+
+describe('NAVIGATE_TOOL_TIMEOUT_MS', () => {
+  it('is 150 s (110 s approval + 30 s load + margin)', () => {
+    expect(NAVIGATE_TOOL_TIMEOUT_MS).toBe(150_000);
   });
 });

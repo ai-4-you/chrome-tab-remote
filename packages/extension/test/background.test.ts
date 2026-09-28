@@ -8,6 +8,7 @@ import { installChromeMock } from './chrome-mock.js';
 // must be installed first.
 const mock = installChromeMock();
 const { getGrant, mintGrant, suspendGrant } = await import('../src/background/grant-store.js');
+const { getAudit } = await import('../src/background/audit.js');
 await import('../src/background/index.js');
 
 const ORIGIN = 'https://intranet.corp.example';
@@ -132,5 +133,85 @@ describe('runtime host permission teardown', () => {
     expect(res.ok).toBe(false);
     expect(res.error).toContain('Cannot access contents');
     expect(mock.permissions.remove).toHaveBeenCalledWith({ origins: [`${ORIGIN}/*`] });
+  });
+});
+
+describe('grant_created audit names capabilities', () => {
+  beforeEach(async () => {
+    await mock.storage.session.clear();
+    await mock.storage.local.clear();
+    mock.scripting.executeScript.mockResolvedValue([]);
+  });
+
+  it('names allow-navigate in the mint audit detail when the flag is set', async () => {
+    mock.tabs.get.mockResolvedValue({ id: 3, url: `${ORIGIN}/page` });
+    await sendPanelMessage({
+      type: 'ctrGrantActiveTab',
+      tabId: 3,
+      mode: 'act',
+      allowViewportScreenshot: false,
+      allowNavigate: true,
+    });
+    const audit = await getAudit();
+    const grantCreated = audit.find((e) => e.type === 'grant_created');
+    expect(grantCreated?.detail).toContain('allow navigate');
+  });
+
+  it('does NOT name allow-navigate when the flag is off', async () => {
+    mock.tabs.get.mockResolvedValue({ id: 3, url: `${ORIGIN}/page` });
+    await sendPanelMessage({
+      type: 'ctrGrantActiveTab',
+      tabId: 3,
+      mode: 'act',
+      allowViewportScreenshot: false,
+      allowNavigate: false,
+    });
+    const audit = await getAudit();
+    const grantCreated = audit.find((e) => e.type === 'grant_created');
+    expect(grantCreated?.detail).not.toContain('allow navigate');
+  });
+});
+
+describe('§2.7: re-confirm to a different origin resets high-risk flags', () => {
+  beforeEach(async () => {
+    await mock.storage.session.clear();
+    await mock.storage.local.clear();
+    mock.scripting.executeScript.mockResolvedValue([]);
+  });
+
+  it('re-pin to a new origin: audit detail names the reset', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act', true, true);
+    await suspendGrant(grant.grantId);
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${NEW_ORIGIN}/page` });
+
+    const res = (await sendPanelMessage({
+      type: 'ctrReconfirm',
+      grantId: grant.grantId,
+      expectedOrigin: NEW_ORIGIN,
+    })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+
+    const audit = await getAudit();
+    const reconfirmed = audit.find((e) => e.type === 'grant_reconfirmed');
+    expect(reconfirmed?.detail).toContain('reset autoApprove, allowViewportScreenshot');
+    expect(reconfirmed?.detail).toContain(NEW_ORIGIN);
+  });
+
+  it('re-pin to the SAME origin: audit detail does NOT name a reset', async () => {
+    const grant = await mintGrant(1, ORIGIN, Date.now(), 'act');
+    await suspendGrant(grant.grantId);
+    // Same-origin re-confirm (chrome-error recovery).
+    mock.tabs.get.mockResolvedValue({ id: 1, url: `${ORIGIN}/recovered` });
+
+    const res = (await sendPanelMessage({
+      type: 'ctrReconfirm',
+      grantId: grant.grantId,
+      expectedOrigin: ORIGIN,
+    })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+
+    const audit = await getAudit();
+    const reconfirmed = audit.find((e) => e.type === 'grant_reconfirmed');
+    expect(reconfirmed?.detail).not.toContain('reset');
   });
 });

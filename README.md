@@ -90,9 +90,10 @@ npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_snapshot filter:interactive --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_read ref:n1 --allow-http
 npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_screenshot_viewport --allow-http
+npx -y mcporter call http://127.0.0.1:8917/mcp --tool tab_navigate url:https://example.com/ --allow-http
 ```
 
-There is at most one grant, so `grantId` is optional everywhere. The snapshot comes back as compact indented text — one line per element with a ref (`n1`), role, name, and link URL; `filter:interactive` narrows it to controls and headings. Pass a ref to `tab_read` for the full text of one element. `tab_screenshot_viewport` requires the separate checkbox, and only succeeds while the granted tab is already active in its window; it returns a bounded JPEG image plus metadata.
+There is at most one grant, so `grantId` is optional everywhere. The snapshot comes back as compact indented text — one line per element with a ref (`n1`), role, name, and link URL; `filter:interactive` narrows it to controls and headings. Pass a ref to `tab_read` for the full text of one element. `tab_screenshot_viewport` requires the separate checkbox, and only succeeds while the granted tab is already active in its window; it returns a bounded JPEG image plus metadata. `tab_navigate` requires the **Allow Navigate** checkbox and navigates the granted tab to a new URL (same-origin: no re-approval; cross-origin: a new approval card); snapshot refs are invalidated by every navigation.
 
 Or hand the tab to a real agent:
 
@@ -131,6 +132,9 @@ Multi-step work uses `tab_plan`: the agent proposes up to 10 steps, you see the 
 | Call `tab_click` on an observe-only grant | Fails with `observe_only` — the page is never touched |
 | Call `tab_screenshot_viewport` without its checkbox | Fails with `screenshot_not_allowed` — no pixels are captured |
 | Call `tab_screenshot_viewport` while the granted tab is backgrounded | Fails with `tab_not_visible` — it never steals focus |
+| Call `tab_navigate` without the **Allow Navigate** checkbox | Fails with `navigate_not_allowed` — no navigation is dispatched |
+| Call `tab_navigate` to a cross-origin URL | A new approval card is shown; the grant is suspended (re-pinned to the new origin) on completion |
+| Call `tab_navigate` to `javascript:` or `data:` | Rejected with `navigate_bad_url` — only http/https are allowed |
 | **Deny** an action in the approval card | Agent gets `approval_denied`; the page is untouched |
 | Toggle **Freaky mode** off mid-session | The very next action pauses for approval again |
 | Revoke and re-grant with Freaky mode previously on | The new grant starts strict (per-action approval) |

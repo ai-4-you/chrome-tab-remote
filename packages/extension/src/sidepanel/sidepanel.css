@@ -243,6 +243,19 @@ h2 {
   color: var(--danger);
 }
 
+/* Origin-transition reset (§2.7): a fact stated danger-styled ABOVE the
+   confirm button — not fine print. */
+.reconfirm-reset-line {
+  margin: 6px 0 2px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: rgba(194, 47, 47, 0.08);
+}
+
 #approval-detail {
   white-space: pre-line;
 }

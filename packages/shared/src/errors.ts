@@ -19,6 +19,8 @@ export const ERROR_CODES = [
   'tab_not_visible',
   'screenshot_too_large',
   'screenshot_capture_failed',
+  'navigate_not_allowed',
+  'navigate_bad_url',
 ] as const;
 
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
@@ -87,4 +89,12 @@ export const ERROR_RECOVERY: Record<ErrorCode, string> = {
   screenshot_capture_failed:
     'Chrome did not permit this viewport capture. Ask the user to focus the granted tab and ' +
     'click the Chrome Tab Remote toolbar action on it, then retry. Restricted Chrome pages cannot be captured.',
+  navigate_not_allowed:
+    'Navigation is not authorized for this grant (it is observe-only or the user has not ' +
+    "enabled 'Allow Navigate'). Ask the user to enable 'Allow Navigate' in the side panel " +
+    'for this tab (act grants only), then retry.',
+  navigate_bad_url:
+    'The requested URL is not a legal navigation target (must be a plain http:// or https:// ' +
+    'URL without embedded credentials, backslashes, or control characters). Fix the URL and retry; ' +
+    'never retry with a different scheme such as javascript: or file:.',
 };

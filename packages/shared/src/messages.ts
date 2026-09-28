@@ -17,6 +17,7 @@ export const TOOL_NAMES = [
   'tab_select',
   'tab_scroll',
   'tab_plan',
+  'tab_navigate',
 ] as const;
 export const ToolNameSchema = z.enum(TOOL_NAMES);
 export type ToolName = z.infer<typeof ToolNameSchema>;
@@ -124,6 +125,11 @@ export type PageState = (typeof PAGE_STATES)[number];
  */
 export const APPROVAL_TIMEOUT_MS = 110_000;
 export const ACT_TOOL_TIMEOUT_MS = 120_000;
+/**
+ * Host-side budget for tab_navigate: 110 s approval wait + 30 s load wait +
+ * margin. The 15 s default bridge timeout would kill the call mid-approval-card.
+ */
+export const NAVIGATE_TOOL_TIMEOUT_MS = 150_000;
 
 /** Result of one executed step. */
 export const ScrollMetricsSchema = z.object({
@@ -210,6 +216,25 @@ export const ViewportScreenshotResultSchema = z.object({
   title: z.string(),
 });
 export type ViewportScreenshotResult = z.infer<typeof ViewportScreenshotResultSchema>;
+
+/**
+ * Receipt of tab_navigate. Honest about what actually happened:
+ * - `loadState: 'timeout'` — the 30 s load wait expired; the navigation was
+ *   dispatched but no load-complete was observed (no retry is attempted).
+ * - `loadState: 'conflict'` — the tab now shows a URL this call did not load
+ *   (another navigation landed during the wait); it is never laundered as success.
+ * - `grantStatus: 'suspended'` — the navigation crossed the grant's origin pin
+ *   (or landed on a Chrome error page); the grant is suspended and requires an
+ *   informed re-confirm. This is still an OK result: the navigation really
+ *   happened, and that is the point.
+ */
+export const NavigateResultSchema = z.object({
+  requestedUrl: z.string().url(),
+  finalUrl: z.string(),
+  loadState: z.enum(['complete', 'timeout', 'conflict']),
+  grantStatus: z.enum(['active', 'suspended']),
+});
+export type NavigateResult = z.infer<typeof NavigateResultSchema>;
 
 /** host -> extension: request execution of one tool call. */
 export const ToolCallRequestSchema = z.object({
